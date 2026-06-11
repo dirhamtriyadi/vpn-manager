@@ -68,14 +68,14 @@ function buildRouterOSScript(iface: WGInterface | null, peer: Peer, config: stri
   const keepalive = peer.persistent_keepalive || 25
 
   const lines = [
-    `# MikroTik RouterOS 7 WireGuard client script for peer: ${peer.name}`,
-    `# Paste this into MikroTik Terminal. Review endpoint/allowed-address before running.`,
+    `# RouterOS 7 WireGuard client script for peer: ${peer.name}`,
+    `# Paste this into RouterOS Terminal. Review endpoint/allowed-address before running.`,
   ]
 
   if (!privateKey || privateKey.includes("<your-private-key>")) {
     lines.push(
       `# WARNING: this peer was created with a public key supplied by the client,`,
-      `# so the panel does not have the MikroTik private key.`,
+      `# so the panel does not have the RouterOS private key.`,
       `# Replace CHANGE_ME_PRIVATE_KEY or generate the key directly on RouterOS.`,
     )
   }
@@ -109,8 +109,8 @@ function buildRouterOSScript(iface: WGInterface | null, peer: Peer, config: stri
 function buildRouterOSTeardownScript(peer: Peer): string {
   const name = routerOSName(`wg-${peer.name}`)
   return [
-    `# MikroTik RouterOS 7 cleanup script for peer: ${peer.name}`,
-    `# Use this ONLY when you want to remove the VPN client from this MikroTik router.`,
+    `# RouterOS 7 teardown script for peer: ${peer.name}`,
+    `# Use this ONLY when you want to remove the VPN client from this RouterOS router.`,
     `# It deletes the WireGuard interface, its IP address, routes, and wg-panel firewall/NAT rules.`,
     `# It does NOT delete the peer from WG Panel. Use the panel Delete/Trash button for that.`,
     `/ip/address/remove [find interface="${quoteRouterOS(name)}"]`,
@@ -129,13 +129,15 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
   const [copied, setCopied] = useState(false)
   const [copiedScript, setCopiedScript] = useState(false)
   const [copiedTeardown, setCopiedTeardown] = useState(false)
-  const [mode, setMode] = useState<"conf" | "routeros" | "teardown">("conf")
+  const [mode, setMode] = useState<"conf" | "routeros">("conf")
+  const [routerOSMode, setRouterOSMode] = useState<"install" | "teardown">("install")
 
   useEffect(() => {
     if (!peer) return
     setLoading(true)
     setConfig("")
     setMode("conf")
+    setRouterOSMode("install")
     getPeerConfigText(peer.id)
       .then(setConfig)
       .catch(() => setConfig("# Failed to load config"))
@@ -176,7 +178,7 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
         <DialogHeader>
           <DialogTitle>Client config — {peer?.name}</DialogTitle>
           <DialogDescription>
-            Scan the QR, download the .conf file, install this peer on MikroTik, or copy a cleanup script for removing it from RouterOS.
+            Use QR/.conf for standard WireGuard clients, or open RouterOS for install and teardown scripts.
           </DialogDescription>
         </DialogHeader>
 
@@ -198,16 +200,7 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
                 onClick={() => setMode("routeros")}
               >
                 <Router />
-                Install on MikroTik
-              </Button>
-              <Button
-                type="button"
-                variant={mode === "teardown" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMode("teardown")}
-              >
-                <Trash2 />
-                Remove from MikroTik
+                RouterOS
               </Button>
             </div>
 
@@ -245,64 +238,89 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
                   </div>
                 </div>
               </div>
-            ) : mode === "routeros" ? (
-              <div className="space-y-3">
-                <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-                  <div className="font-medium">Install script</div>
-                  <p className="mt-1 text-xs">
-                    Copy this when you want this MikroTik router to connect as a WireGuard client. Paste it into MikroTik Terminal after reviewing the endpoint and allowed-address.
-                  </p>
-                </div>
-                <Textarea
-                  readOnly
-                  value={loading ? "Loading..." : routerOSScript}
-                  className="h-[320px] font-mono text-xs"
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={copyRouterOSScript}
-                  >
-                    {copiedScript ? <Check /> : <Copy />}
-                    {copiedScript ? "Copied" : "Copy RouterOS script"}
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Paste into MikroTik Terminal. For first test, keep allowed-address limited to the VPN subnet.
-                  </p>
-                </div>
-              </div>
             ) : (
               <div className="space-y-3">
-                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                  <div className="flex items-center gap-2 font-medium">
-                    <AlertTriangle className="h-4 w-4" />
-                    Remove from MikroTik only
-                  </div>
-                  <p className="mt-1 text-xs">
-                    This cleanup script uninstalls the WireGuard interface that was created on the MikroTik router. It does not delete the peer from WG Panel. Use this only when you want to disconnect/remove this router from the VPN.
-                  </p>
-                </div>
-                <Textarea
-                  readOnly
-                  value={routerOSTeardownScript}
-                  className="h-[240px] font-mono text-xs"
-                />
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap gap-2 rounded-md border bg-muted/30 p-2">
                   <Button
                     type="button"
-                    variant="outline"
+                    variant={routerOSMode === "install" ? "default" : "outline"}
                     size="sm"
-                    onClick={copyRouterOSTeardownScript}
+                    onClick={() => setRouterOSMode("install")}
                   >
-                    {copiedTeardown ? <Check /> : <Copy />}
-                    {copiedTeardown ? "Copied" : "Copy cleanup script"}
+                    <Router />
+                    Install script
                   </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Paste into MikroTik Terminal to remove this VPN interface from RouterOS.
-                  </p>
+                  <Button
+                    type="button"
+                    variant={routerOSMode === "teardown" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setRouterOSMode("teardown")}
+                  >
+                    <Trash2 />
+                    Teardown script
+                  </Button>
                 </div>
+
+                {routerOSMode === "install" ? (
+                  <>
+                    <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+                      <div className="font-medium">RouterOS install script</div>
+                      <p className="mt-1 text-xs">
+                        Copy this when you want a RouterOS router to connect as a WireGuard client. Paste it into RouterOS Terminal after reviewing the endpoint and allowed-address.
+                      </p>
+                    </div>
+                    <Textarea
+                      readOnly
+                      value={loading ? "Loading..." : routerOSScript}
+                      className="h-[320px] font-mono text-xs"
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={copyRouterOSScript}
+                      >
+                        {copiedScript ? <Check /> : <Copy />}
+                        {copiedScript ? "Copied" : "Copy RouterOS script"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Paste into RouterOS Terminal. For first test, keep allowed-address limited to the VPN subnet.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                      <div className="flex items-center gap-2 font-medium">
+                        <AlertTriangle className="h-4 w-4" />
+                        RouterOS teardown script
+                      </div>
+                      <p className="mt-1 text-xs">
+                        This script removes the WireGuard interface, IP address, routes, firewall, and NAT rules from the RouterOS router only. It does not delete the peer from WG Panel.
+                      </p>
+                    </div>
+                    <Textarea
+                      readOnly
+                      value={routerOSTeardownScript}
+                      className="h-[240px] font-mono text-xs"
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={copyRouterOSTeardownScript}
+                      >
+                        {copiedTeardown ? <Check /> : <Copy />}
+                        {copiedTeardown ? "Copied" : "Copy teardown script"}
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Paste into RouterOS Terminal only when you want to remove this VPN interface from the router.
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
