@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: wg_panel
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    # WireGuard needs to create a netlink device and bind the listen port on the host.
+    # host networking + NET_ADMIN is the simplest reliable setup. The host kernel
+    # must have the wireguard module available.
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    environment:
+      SERVER_PORT: 8083
+      GIN_MODE: release
+      DB_HOST: localhost
+      DB_PORT: 5434
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: wg_panel
+      DB_SSLMODE: disable
+      DEFAULT_ENDPOINT: vpn.example.com
+      CORS_ALLOW_ORIGINS: "http://100.113.150.46:5173"
+
+volumes:
+  pgdata:

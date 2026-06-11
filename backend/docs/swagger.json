@@ -1,0 +1,673 @@
+{
+    "schemes": [
+        "http",
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "Manage a WireGuard VPN concentrator (interfaces \u0026 peers) without touching the CLI.\nKeys, client configs and QR codes are generated server-side; peers are pushed to the kernel via netlink.",
+        "title": "WireGuard Panel API",
+        "contact": {
+            "name": "API Support",
+            "email": "support@example.com"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api/v1",
+    "paths": {
+        "/interfaces": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interfaces"
+                ],
+                "summary": "List interfaces",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interfaces"
+                ],
+                "summary": "Create an interface",
+                "parameters": [
+                    {
+                        "description": "Interface payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateInterfaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/interfaces/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interfaces"
+                ],
+                "summary": "Get an interface (with peers)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Interface ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interfaces"
+                ],
+                "summary": "Update an interface",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Interface ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Interface payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateInterfaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interfaces"
+                ],
+                "summary": "Delete an interface",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Interface ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/interfaces/{id}/peers": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "peers"
+                ],
+                "summary": "List peers of an interface",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Interface ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Server auto-generates keys and IP when omitted",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "peers"
+                ],
+                "summary": "Add a peer",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Interface ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Peer payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreatePeerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/interfaces/{id}/status": {
+            "get": {
+                "description": "Returns peers enriched with live handshake/transfer stats",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interfaces"
+                ],
+                "summary": "Interface runtime status",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Interface ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/interfaces/{id}/sync": {
+            "post": {
+                "description": "(Re)create the link and push the current peer set to WireGuard",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "interfaces"
+                ],
+                "summary": "Apply interface to the kernel",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Interface ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/peers/{peerId}": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "peers"
+                ],
+                "summary": "Update a peer",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Peer ID",
+                        "name": "peerId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Peer payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdatePeerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "peers"
+                ],
+                "summary": "Delete a peer",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Peer ID",
+                        "name": "peerId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/peers/{peerId}/config": {
+            "get": {
+                "description": "Returns the wg-quick .conf for this peer as plain text",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "peers"
+                ],
+                "summary": "Get client config",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Peer ID",
+                        "name": "peerId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/peers/{peerId}/qrcode": {
+            "get": {
+                "description": "Returns a PNG QR code of the peer's wg-quick config",
+                "produces": [
+                    "image/png"
+                ],
+                "tags": [
+                    "peers"
+                ],
+                "summary": "Get client config QR code",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Peer ID",
+                        "name": "peerId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "dto.APIResponse": {
+            "type": "object",
+            "properties": {
+                "data": {},
+                "message": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.CreateInterfaceRequest": {
+            "type": "object",
+            "required": [
+                "address",
+                "endpoint",
+                "listen_port",
+                "name"
+            ],
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "10.8.0.1/24"
+                },
+                "dns": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "example": "1.1.1.1"
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "endpoint": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 3,
+                    "example": "vpn.example.com"
+                },
+                "listen_port": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "example": 51820
+                },
+                "mtu": {
+                    "type": "integer",
+                    "maximum": 9000,
+                    "minimum": 576,
+                    "example": 1420
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 2,
+                    "example": "wg0"
+                },
+                "private_key": {
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "dto.CreatePeerRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "assigned_ip": {
+                    "type": "string",
+                    "example": "10.8.0.2"
+                },
+                "client_allowed_ips": {
+                    "type": "string",
+                    "example": "0.0.0.0/0, ::/0"
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "example": "laptop-andi"
+                },
+                "persistent_keepalive": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "example": 25
+                },
+                "public_key": {
+                    "type": "string",
+                    "example": ""
+                },
+                "use_preshared_key": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "dto.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.UpdateInterfaceRequest": {
+            "type": "object",
+            "required": [
+                "address",
+                "endpoint",
+                "listen_port"
+            ],
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "example": "10.8.0.1/24"
+                },
+                "dns": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "example": "1.1.1.1"
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "endpoint": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 3,
+                    "example": "vpn.example.com"
+                },
+                "listen_port": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "example": 51820
+                },
+                "mtu": {
+                    "type": "integer",
+                    "maximum": 9000,
+                    "minimum": 576,
+                    "example": 1420
+                }
+            }
+        },
+        "dto.UpdatePeerRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "client_allowed_ips": {
+                    "type": "string",
+                    "example": "0.0.0.0/0, ::/0"
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "example": "laptop-andi"
+                },
+                "persistent_keepalive": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "example": 25
+                }
+            }
+        }
+    }
+}

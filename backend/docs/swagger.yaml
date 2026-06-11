@@ -1,0 +1,462 @@
+basePath: /api/v1
+definitions:
+  dto.APIResponse:
+    properties:
+      data: {}
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  dto.CreateInterfaceRequest:
+    properties:
+      address:
+        example: 10.8.0.1/24
+        type: string
+      dns:
+        example: 1.1.1.1
+        maxLength: 128
+        type: string
+      enabled:
+        example: true
+        type: boolean
+      endpoint:
+        example: vpn.example.com
+        maxLength: 255
+        minLength: 3
+        type: string
+      listen_port:
+        example: 51820
+        maximum: 65535
+        minimum: 1
+        type: integer
+      mtu:
+        example: 1420
+        maximum: 9000
+        minimum: 576
+        type: integer
+      name:
+        example: wg0
+        maxLength: 32
+        minLength: 2
+        type: string
+      private_key:
+        example: ""
+        type: string
+    required:
+    - address
+    - endpoint
+    - listen_port
+    - name
+    type: object
+  dto.CreatePeerRequest:
+    properties:
+      assigned_ip:
+        example: 10.8.0.2
+        type: string
+      client_allowed_ips:
+        example: 0.0.0.0/0, ::/0
+        type: string
+      enabled:
+        example: true
+        type: boolean
+      name:
+        example: laptop-andi
+        maxLength: 128
+        minLength: 1
+        type: string
+      persistent_keepalive:
+        example: 25
+        maximum: 65535
+        minimum: 0
+        type: integer
+      public_key:
+        example: ""
+        type: string
+      use_preshared_key:
+        example: true
+        type: boolean
+    required:
+    - name
+    type: object
+  dto.ErrorResponse:
+    properties:
+      errors:
+        additionalProperties:
+          type: string
+        type: object
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  dto.UpdateInterfaceRequest:
+    properties:
+      address:
+        example: 10.8.0.1/24
+        type: string
+      dns:
+        example: 1.1.1.1
+        maxLength: 128
+        type: string
+      enabled:
+        example: true
+        type: boolean
+      endpoint:
+        example: vpn.example.com
+        maxLength: 255
+        minLength: 3
+        type: string
+      listen_port:
+        example: 51820
+        maximum: 65535
+        minimum: 1
+        type: integer
+      mtu:
+        example: 1420
+        maximum: 9000
+        minimum: 576
+        type: integer
+    required:
+    - address
+    - endpoint
+    - listen_port
+    type: object
+  dto.UpdatePeerRequest:
+    properties:
+      client_allowed_ips:
+        example: 0.0.0.0/0, ::/0
+        type: string
+      enabled:
+        example: true
+        type: boolean
+      name:
+        example: laptop-andi
+        maxLength: 128
+        minLength: 1
+        type: string
+      persistent_keepalive:
+        example: 25
+        maximum: 65535
+        minimum: 0
+        type: integer
+    required:
+    - name
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+  description: |-
+    Manage a WireGuard VPN concentrator (interfaces & peers) without touching the CLI.
+    Keys, client configs and QR codes are generated server-side; peers are pushed to the kernel via netlink.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: WireGuard Panel API
+  version: "1.0"
+paths:
+  /interfaces:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+      summary: List interfaces
+      tags:
+      - interfaces
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Interface payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateInterfaceRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Create an interface
+      tags:
+      - interfaces
+  /interfaces/{id}:
+    delete:
+      parameters:
+      - description: Interface ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Delete an interface
+      tags:
+      - interfaces
+    get:
+      parameters:
+      - description: Interface ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get an interface (with peers)
+      tags:
+      - interfaces
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Interface ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Interface payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateInterfaceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Update an interface
+      tags:
+      - interfaces
+  /interfaces/{id}/peers:
+    get:
+      parameters:
+      - description: Interface ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+      summary: List peers of an interface
+      tags:
+      - peers
+    post:
+      consumes:
+      - application/json
+      description: Server auto-generates keys and IP when omitted
+      parameters:
+      - description: Interface ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Peer payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreatePeerRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Add a peer
+      tags:
+      - peers
+  /interfaces/{id}/status:
+    get:
+      description: Returns peers enriched with live handshake/transfer stats
+      parameters:
+      - description: Interface ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Interface runtime status
+      tags:
+      - interfaces
+  /interfaces/{id}/sync:
+    post:
+      description: (Re)create the link and push the current peer set to WireGuard
+      parameters:
+      - description: Interface ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Apply interface to the kernel
+      tags:
+      - interfaces
+  /peers/{peerId}:
+    delete:
+      parameters:
+      - description: Peer ID
+        in: path
+        name: peerId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Delete a peer
+      tags:
+      - peers
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Peer ID
+        in: path
+        name: peerId
+        required: true
+        type: integer
+      - description: Peer payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdatePeerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Update a peer
+      tags:
+      - peers
+  /peers/{peerId}/config:
+    get:
+      description: Returns the wg-quick .conf for this peer as plain text
+      parameters:
+      - description: Peer ID
+        in: path
+        name: peerId
+        required: true
+        type: integer
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get client config
+      tags:
+      - peers
+  /peers/{peerId}/qrcode:
+    get:
+      description: Returns a PNG QR code of the peer's wg-quick config
+      parameters:
+      - description: Peer ID
+        in: path
+        name: peerId
+        required: true
+        type: integer
+      produces:
+      - image/png
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get client config QR code
+      tags:
+      - peers
+schemes:
+- http
+- https
+swagger: "2.0"

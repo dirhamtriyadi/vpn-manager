@@ -1,0 +1,14 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+go-api
+/tmp/
+
+# Env
+.env
+
+# IDE
+.idea/
+.vscode/
