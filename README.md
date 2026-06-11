@@ -101,7 +101,46 @@ sudo iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE
 
 ## Quick start development
 
-### 1. Backend
+Jika memakai root `Makefile`, kamu tidak perlu masuk ke folder `backend/` atau `frontend/` untuk command umum.
+
+Setup awal:
+
+```bash
+make setup
+```
+
+Jalankan backend + frontend sekaligus:
+
+```bash
+make dev
+```
+
+Jika ingin sekalian start database Docker Compose:
+
+```bash
+make dev-db
+```
+
+Jalankan salah satu saja:
+
+```bash
+make backend
+make frontend
+```
+
+Command lain:
+
+```bash
+make help
+make db-up
+make docker-up
+make lint
+make build
+```
+
+Catatan: backend lokal tetap perlu permission `CAP_NET_ADMIN` untuk membuat interface WireGuard. Jika `make backend` atau `make dev` gagal karena permission netlink, jalankan backend dengan user/root yang punya permission tersebut, atau gunakan mode Docker Compose.
+
+### 1. Backend manual
 
 ```bash
 cd backend
