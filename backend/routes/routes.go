@@ -1,11 +1,11 @@
 package routes
 
 import (
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/example/wg-panel/config"
+	"github.com/example/wg-panel/dto"
 	_ "github.com/example/wg-panel/docs"
 	"github.com/example/wg-panel/handlers"
 	"github.com/gin-contrib/cors"
@@ -33,7 +33,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	r.Use(cors.New(corsConfig))
 
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		dto.OK(c, "health check passed", gin.H{"status": "ok"})
 	})
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DialogClose, DialogFooter } from "@/components/ui/dialog"
+import { applyServerValidationErrors } from "@/lib/api"
 
 interface Props {
   onSubmit: (values: InterfaceFormValues) => Promise<void> | void
@@ -40,6 +41,7 @@ export function InterfaceForm({ onSubmit, submitting }: Props) {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<InterfaceFormValues>({
     resolver: zodResolver(interfaceSchema),
@@ -54,8 +56,16 @@ export function InterfaceForm({ onSubmit, submitting }: Props) {
     },
   })
 
+  async function handleValidSubmit(values: InterfaceFormValues) {
+    try {
+      await onSubmit(values)
+    } catch (err) {
+      applyServerValidationErrors<InterfaceFormValues>(setError, err)
+    }
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(handleValidSubmit)} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <Field id="name" label="Name" error={errors.name?.message}>
           <Input id="name" placeholder="wg0" {...register("name")} />

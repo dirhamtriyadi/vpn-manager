@@ -2,49 +2,70 @@ package middleware
 
 import (
 	"fmt"
+	"reflect"
+	"strings"
 
+	"github.com/example/wg-panel/dto"
 	"github.com/go-playground/validator/v10"
 )
 
 // validate is a shared validator instance.
 var validate = validator.New()
 
-// Validate runs struct validation and returns a map of field -> message
-// suitable for returning in a JSON error response. It returns nil when valid.
-func Validate(payload interface{}) map[string]string {
+func init() {
+	validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
+		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+		if name == "-" || name == "" {
+			return fld.Name
+		}
+		return name
+	})
+}
+
+// Validate runs struct validation and returns Laravel-style field errors:
+//   {"field_name": ["message"]}
+// Field names are taken from json tags so React Hook Form can call
+// setError("field_name", ...) without extra mapping.
+func Validate(payload interface{}) dto.ValidationErrors {
 	err := validate.Struct(payload)
 	if err == nil {
 		return nil
 	}
 
-	errs := make(map[string]string)
+	errs := make(dto.ValidationErrors)
 	validationErrors, ok := err.(validator.ValidationErrors)
 	if !ok {
-		errs["_"] = err.Error()
+		errs["_"] = []string{err.Error()}
 		return errs
 	}
 
 	for _, fe := range validationErrors {
-		errs[fe.Field()] = messageForTag(fe)
+		field := fe.Field()
+		errs[field] = append(errs[field], messageForTag(fe))
 	}
 	return errs
 }
 
 func messageForTag(fe validator.FieldError) string {
+	field := strings.ReplaceAll(fe.Field(), "_", " ")
 	switch fe.Tag() {
 	case "required":
-		return "this field is required"
+		return fmt.Sprintf("The %s field is required.", field)
 	case "min":
-		return fmt.Sprintf("must be at least %s", fe.Param())
+		return fmt.Sprintf("The %s must be at least %s.", field, fe.Param())
 	case "max":
-		return fmt.Sprintf("must be at most %s", fe.Param())
+		return fmt.Sprintf("The %s must be at most %s.", field, fe.Param())
 	case "gt":
-		return fmt.Sprintf("must be greater than %s", fe.Param())
+		return fmt.Sprintf("The %s must be greater than %s.", field, fe.Param())
 	case "gte":
-		return fmt.Sprintf("must be greater than or equal to %s", fe.Param())
+		return fmt.Sprintf("The %s must be greater than or equal to %s.", field, fe.Param())
+	case "cidr":
+		return fmt.Sprintf("The %s must be a valid CIDR address.", field)
+	case "ip":
+		return fmt.Sprintf("The %s must be a valid IP address.", field)
 	case "email":
-		return "must be a valid email address"
+		return fmt.Sprintf("The %s must be a valid email address.", field)
 	default:
-		return fmt.Sprintf("failed validation on '%s'", fe.Tag())
+		return fmt.Sprintf("The %s failed validation on '%s'.", field, fe.Tag())
 	}
 }

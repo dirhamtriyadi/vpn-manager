@@ -33,12 +33,32 @@ func (h *PeerHandler) List(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var peers []models.Peer
-	if err := database.DB.Where("interface_id = ?", ifaceID).Order("id asc").Find(&peers).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to fetch peers"})
+	allowedSorts := map[string]string{
+		"id":          "id",
+		"name":        "name",
+		"assigned_ip": "assigned_ip",
+		"enabled":     "enabled",
+		"created_at":  "created_at",
+		"updated_at":  "updated_at",
+	}
+	list := dto.ParseListQuery(c, allowedSorts, "id")
+	query := database.DB.Model(&models.Peer{}).Where("interface_id = ?", ifaceID)
+	if list.Search != "" {
+		like := "%" + list.Search + "%"
+		query = query.Where("name LIKE ? OR assigned_ip LIKE ? OR allowed_ips LIKE ?", like, like, like)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to count peers")
 		return
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Data: peers})
+
+	var peers []models.Peer
+	if err := query.Order(list.OrderClause(allowedSorts)).Limit(list.PerPage).Offset(list.Offset).Find(&peers).Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch peers")
+		return
+	}
+	dto.Paginated(c, "data fetched successfully", peers, dto.NewListMeta(list, total))
 }
 
 // Create godoc
@@ -60,17 +80,17 @@ func (h *PeerHandler) Create(c *gin.Context) {
 
 	var iface models.WGInterface
 	if err := database.DB.Preload("Peers").First(&iface, ifaceID).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.ErrorResponse{Success: false, Message: "interface not found"})
+		dto.Error(c, http.StatusNotFound, "interface not found")
 		return
 	}
 
 	var req dto.CreatePeerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Success: false, Message: "invalid request body"})
+		dto.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	if errs := middleware.Validate(req); errs != nil {
-		c.JSON(http.StatusUnprocessableEntity, dto.ErrorResponse{Success: false, Message: "validation failed", Errors: errs})
+		dto.ValidationError(c, errs)
 		return
 	}
 
@@ -90,7 +110,7 @@ func (h *PeerHandler) Create(c *gin.Context) {
 	if peer.PublicKey == "" {
 		kp, err := wg.GenerateKeyPair()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to generate keys"})
+			dto.Error(c, http.StatusInternalServerError, "failed to generate keys")
 			return
 		}
 		peer.PrivateKey = kp.PrivateKey
@@ -100,7 +120,7 @@ func (h *PeerHandler) Create(c *gin.Context) {
 	if req.UsePresharedKey {
 		psk, err := wg.GeneratePresharedKey()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to generate preshared key"})
+			dto.Error(c, http.StatusInternalServerError, "failed to generate preshared key")
 			return
 		}
 		peer.PresharedKey = psk
@@ -115,7 +135,7 @@ func (h *PeerHandler) Create(c *gin.Context) {
 		}
 		next, err := wg.NextFreeIP(iface.Address, taken)
 		if err != nil {
-			c.JSON(http.StatusUnprocessableEntity, dto.ErrorResponse{Success: false, Message: err.Error()})
+			dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 		assigned = next
@@ -124,7 +144,7 @@ func (h *PeerHandler) Create(c *gin.Context) {
 	peer.AllowedIPs = assigned + "/32"
 
 	if err := database.DB.Create(&peer).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to create peer (public key or IP may already exist)"})
+		dto.Error(c, http.StatusInternalServerError, "failed to create peer (public key or IP may already exist)")
 		return
 	}
 
@@ -132,7 +152,7 @@ func (h *PeerHandler) Create(c *gin.Context) {
 	if err := syncPeer(iface.ID, peer, false); err != nil {
 		msg = "peer saved but not applied to kernel: " + err.Error()
 	}
-	c.JSON(http.StatusCreated, dto.APIResponse{Success: true, Message: msg, Data: peer})
+	dto.Created(c, msg, peer)
 }
 
 // Update godoc
@@ -153,11 +173,11 @@ func (h *PeerHandler) Update(c *gin.Context) {
 
 	var req dto.UpdatePeerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Success: false, Message: "invalid request body"})
+		dto.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	if errs := middleware.Validate(req); errs != nil {
-		c.JSON(http.StatusUnprocessableEntity, dto.ErrorResponse{Success: false, Message: "validation failed", Errors: errs})
+		dto.ValidationError(c, errs)
 		return
 	}
 
@@ -171,7 +191,7 @@ func (h *PeerHandler) Update(c *gin.Context) {
 	}
 
 	if err := database.DB.Save(peer).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to update peer"})
+		dto.Error(c, http.StatusInternalServerError, "failed to update peer")
 		return
 	}
 
@@ -179,7 +199,7 @@ func (h *PeerHandler) Update(c *gin.Context) {
 	if err := syncPeer(peer.InterfaceID, *peer, false); err != nil {
 		msg = "peer saved but not applied to kernel: " + err.Error()
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: msg, Data: peer})
+	dto.OK(c, msg, peer)
 }
 
 // Delete godoc
@@ -198,23 +218,47 @@ func (h *PeerHandler) Delete(c *gin.Context) {
 	ifaceID := peer.InterfaceID
 	peerSnapshot := *peer
 	if err := database.DB.Delete(peer).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to move peer to trash"})
+		dto.Error(c, http.StatusInternalServerError, "failed to move peer to trash")
 		return
 	}
 	msg := "peer moved to trash"
 	if err := syncPeer(ifaceID, peerSnapshot, true); err != nil {
 		msg = "peer moved to trash but kernel not updated: " + err.Error()
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: msg})
+	dto.NoData(c, http.StatusOK, msg)
 }
 
 func (h *PeerHandler) Trash(c *gin.Context) {
-	var peers []models.Peer
-	if err := database.DB.Unscoped().Where("deleted_at IS NOT NULL").Order("deleted_at desc").Find(&peers).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to fetch trashed peers"})
+	allowedSorts := map[string]string{
+		"id":           "id",
+		"name":         "name",
+		"interface_id": "interface_id",
+		"assigned_ip":  "assigned_ip",
+		"created_at":   "created_at",
+		"updated_at":   "updated_at",
+		"deleted_at":   "deleted_at",
+	}
+	list := dto.ParseListQuery(c, allowedSorts, "deleted_at")
+	if c.Query("sort_order") == "" {
+		list.SortOrder = "desc"
+	}
+	query := database.DB.Unscoped().Model(&models.Peer{}).Where("deleted_at IS NOT NULL")
+	if list.Search != "" {
+		like := "%" + list.Search + "%"
+		query = query.Where("name LIKE ? OR assigned_ip LIKE ? OR allowed_ips LIKE ?", like, like, like)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to count trashed peers")
 		return
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Data: peers})
+
+	var peers []models.Peer
+	if err := query.Order(list.OrderClause(allowedSorts)).Limit(list.PerPage).Offset(list.Offset).Find(&peers).Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch trashed peers")
+		return
+	}
+	dto.Paginated(c, "data fetched successfully", peers, dto.NewListMeta(list, total))
 }
 
 func (h *PeerHandler) Restore(c *gin.Context) {
@@ -223,23 +267,23 @@ func (h *PeerHandler) Restore(c *gin.Context) {
 		return
 	}
 	if !peer.DeletedAt.Valid {
-		c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: "peer already active", Data: peer})
+		dto.OK(c, "peer already active", peer)
 		return
 	}
 	var iface models.WGInterface
 	if err := database.DB.First(&iface, peer.InterfaceID).Error; err != nil {
-		c.JSON(http.StatusConflict, dto.ErrorResponse{Success: false, Message: "restore the parent interface before restoring this peer"})
+		dto.Error(c, http.StatusConflict, "restore the parent interface before restoring this peer")
 		return
 	}
 	if err := database.DB.Unscoped().Model(peer).Update("deleted_at", nil).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to restore peer"})
+		dto.Error(c, http.StatusInternalServerError, "failed to restore peer")
 		return
 	}
 	msg := "peer restored"
 	if err := syncPeer(peer.InterfaceID, *peer, false); err != nil {
 		msg = "peer restored but kernel not updated: " + err.Error()
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: msg, Data: peer})
+	dto.OK(c, msg, peer)
 }
 
 func (h *PeerHandler) Purge(c *gin.Context) {
@@ -249,14 +293,14 @@ func (h *PeerHandler) Purge(c *gin.Context) {
 	}
 	peerSnapshot := *peer
 	if err := database.DB.Unscoped().Delete(peer).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to permanently delete peer"})
+		dto.Error(c, http.StatusInternalServerError, "failed to permanently delete peer")
 		return
 	}
 	msg := "peer permanently deleted"
 	if err := syncPeer(peerSnapshot.InterfaceID, peerSnapshot, true); err != nil {
 		msg = "peer permanently deleted but kernel not updated: " + err.Error()
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: msg})
+	dto.NoData(c, http.StatusOK, msg)
 }
 
 // Config godoc
@@ -275,7 +319,7 @@ func (h *PeerHandler) Config(c *gin.Context) {
 	}
 	var iface models.WGInterface
 	if err := database.DB.First(&iface, peer.InterfaceID).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.ErrorResponse{Success: false, Message: "interface not found"})
+		dto.Error(c, http.StatusNotFound, "interface not found")
 		return
 	}
 	cfg := wg.BuildClientConfig(&iface, peer)
@@ -299,13 +343,13 @@ func (h *PeerHandler) QRCode(c *gin.Context) {
 	}
 	var iface models.WGInterface
 	if err := database.DB.First(&iface, peer.InterfaceID).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.ErrorResponse{Success: false, Message: "interface not found"})
+		dto.Error(c, http.StatusNotFound, "interface not found")
 		return
 	}
 	cfg := wg.BuildClientConfig(&iface, peer)
 	png, err := qrcode.Encode(cfg, qrcode.Medium, 320)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to render QR"})
+		dto.Error(c, http.StatusInternalServerError, "failed to render QR")
 		return
 	}
 	c.Data(http.StatusOK, "image/png", png)
@@ -325,15 +369,15 @@ func findPeerWithScope(c *gin.Context, db *gorm.DB) (*models.Peer, error) {
 	idStr := c.Param("peerId")
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Success: false, Message: "invalid peer id"})
+		dto.Error(c, http.StatusBadRequest, "invalid peer id")
 		return nil, errors.New("invalid id")
 	}
 	var peer models.Peer
 	if err := db.First(&peer, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, dto.ErrorResponse{Success: false, Message: "peer not found"})
+			dto.Error(c, http.StatusNotFound, "peer not found")
 		} else {
-			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to fetch peer"})
+			dto.Error(c, http.StatusInternalServerError, "failed to fetch peer")
 		}
 		return nil, err
 	}

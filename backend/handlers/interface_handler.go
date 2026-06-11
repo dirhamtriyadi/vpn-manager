@@ -33,12 +33,35 @@ func NewInterfaceHandler(cfg *config.Config) *InterfaceHandler {
 // @Success      200  {object}  dto.APIResponse
 // @Router       /interfaces [get]
 func (h *InterfaceHandler) List(c *gin.Context) {
-	var ifaces []models.WGInterface
-	if err := database.DB.Order("id asc").Find(&ifaces).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to fetch interfaces"})
+	allowedSorts := map[string]string{
+		"id":          "id",
+		"name":        "name",
+		"listen_port": "listen_port",
+		"address":     "address",
+		"endpoint":    "endpoint",
+		"enabled":     "enabled",
+		"created_at":  "created_at",
+		"updated_at":  "updated_at",
+	}
+	list := dto.ParseListQuery(c, allowedSorts, "id")
+	query := database.DB.Model(&models.WGInterface{})
+	if list.Search != "" {
+		like := "%" + list.Search + "%"
+		query = query.Where("name LIKE ? OR address LIKE ? OR endpoint LIKE ?", like, like, like)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to count interfaces")
 		return
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Data: ifaces})
+
+	var ifaces []models.WGInterface
+	if err := query.Order(list.OrderClause(allowedSorts)).Limit(list.PerPage).Offset(list.Offset).Find(&ifaces).Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch interfaces")
+		return
+	}
+	dto.Paginated(c, "data fetched successfully", ifaces, dto.NewListMeta(list, total))
 }
 
 // Get godoc
@@ -54,7 +77,7 @@ func (h *InterfaceHandler) Get(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Data: iface})
+	dto.OK(c, "data fetched successfully", iface)
 }
 
 // Create godoc
@@ -69,11 +92,11 @@ func (h *InterfaceHandler) Get(c *gin.Context) {
 func (h *InterfaceHandler) Create(c *gin.Context) {
 	var req dto.CreateInterfaceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Success: false, Message: "invalid request body"})
+		dto.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	if errs := middleware.Validate(req); errs != nil {
-		c.JSON(http.StatusUnprocessableEntity, dto.ErrorResponse{Success: false, Message: "validation failed", Errors: errs})
+		dto.ValidationError(c, errs)
 		return
 	}
 
@@ -81,14 +104,14 @@ func (h *InterfaceHandler) Create(c *gin.Context) {
 	if privateKey == "" {
 		kp, err := wg.GenerateKeyPair()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to generate keys"})
+			dto.Error(c, http.StatusInternalServerError, "failed to generate keys")
 			return
 		}
 		privateKey = kp.PrivateKey
 	}
 	publicKey, err := wg.PublicKeyFromPrivate(privateKey)
 	if err != nil {
-		c.JSON(http.StatusUnprocessableEntity, dto.ErrorResponse{Success: false, Message: "invalid private key"})
+		dto.Error(c, http.StatusUnprocessableEntity, "invalid private key")
 		return
 	}
 
@@ -123,15 +146,15 @@ func (h *InterfaceHandler) Create(c *gin.Context) {
 	// silently purging trash.
 	var deletedIface models.WGInterface
 	if err := database.DB.Unscoped().Where("name = ? AND deleted_at IS NOT NULL", req.Name).First(&deletedIface).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to check deleted interfaces"})
+		dto.Error(c, http.StatusInternalServerError, "failed to check deleted interfaces")
 		return
 	} else if err == nil {
-		c.JSON(http.StatusConflict, dto.ErrorResponse{Success: false, Message: "interface name exists in trash; restore or permanently delete it first"})
+		dto.Error(c, http.StatusConflict, "interface name exists in trash; restore or permanently delete it first")
 		return
 	}
 
 	if err := database.DB.Create(&iface).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to create interface (name/port may already exist)"})
+		dto.Error(c, http.StatusInternalServerError, "failed to create interface (name/port may already exist)")
 		return
 	}
 
@@ -139,7 +162,7 @@ func (h *InterfaceHandler) Create(c *gin.Context) {
 	if err := reconcile(iface.ID); err != nil {
 		msg = "interface saved but not applied to kernel: " + err.Error()
 	}
-	c.JSON(http.StatusCreated, dto.APIResponse{Success: true, Message: msg, Data: iface})
+	dto.Created(c, msg, iface)
 }
 
 // Update godoc
@@ -160,11 +183,11 @@ func (h *InterfaceHandler) Update(c *gin.Context) {
 
 	var req dto.UpdateInterfaceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Success: false, Message: "invalid request body"})
+		dto.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	if errs := middleware.Validate(req); errs != nil {
-		c.JSON(http.StatusUnprocessableEntity, dto.ErrorResponse{Success: false, Message: "validation failed", Errors: errs})
+		dto.ValidationError(c, errs)
 		return
 	}
 
@@ -180,7 +203,7 @@ func (h *InterfaceHandler) Update(c *gin.Context) {
 	}
 
 	if err := database.DB.Save(iface).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to update interface"})
+		dto.Error(c, http.StatusInternalServerError, "failed to update interface")
 		return
 	}
 
@@ -188,7 +211,7 @@ func (h *InterfaceHandler) Update(c *gin.Context) {
 	if err := reconcile(iface.ID); err != nil {
 		msg = "interface saved but not applied to kernel: " + err.Error()
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: msg, Data: iface})
+	dto.OK(c, msg, iface)
 }
 
 // Delete godoc
@@ -207,11 +230,11 @@ func (h *InterfaceHandler) Delete(c *gin.Context) {
 
 	removeErr := wg.RemoveLink(iface.Name)
 	if err := database.DB.Where("interface_id = ?", iface.ID).Delete(&models.Peer{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to move interface peers to trash"})
+		dto.Error(c, http.StatusInternalServerError, "failed to move interface peers to trash")
 		return
 	}
 	if err := database.DB.Delete(iface).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to move interface to trash"})
+		dto.Error(c, http.StatusInternalServerError, "failed to move interface to trash")
 		return
 	}
 
@@ -219,16 +242,40 @@ func (h *InterfaceHandler) Delete(c *gin.Context) {
 	if removeErr != nil {
 		msg = "interface moved to trash, but device cleanup failed: " + removeErr.Error()
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: msg})
+	dto.NoData(c, http.StatusOK, msg)
 }
 
 func (h *InterfaceHandler) Trash(c *gin.Context) {
-	var ifaces []models.WGInterface
-	if err := database.DB.Unscoped().Where("deleted_at IS NOT NULL").Order("deleted_at desc").Find(&ifaces).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to fetch trashed interfaces"})
+	allowedSorts := map[string]string{
+		"id":         "id",
+		"name":       "name",
+		"address":    "address",
+		"endpoint":   "endpoint",
+		"created_at": "created_at",
+		"updated_at": "updated_at",
+		"deleted_at": "deleted_at",
+	}
+	list := dto.ParseListQuery(c, allowedSorts, "deleted_at")
+	if c.Query("sort_order") == "" {
+		list.SortOrder = "desc"
+	}
+	query := database.DB.Unscoped().Model(&models.WGInterface{}).Where("deleted_at IS NOT NULL")
+	if list.Search != "" {
+		like := "%" + list.Search + "%"
+		query = query.Where("name LIKE ? OR address LIKE ? OR endpoint LIKE ?", like, like, like)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to count trashed interfaces")
 		return
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Data: ifaces})
+
+	var ifaces []models.WGInterface
+	if err := query.Order(list.OrderClause(allowedSorts)).Limit(list.PerPage).Offset(list.Offset).Find(&ifaces).Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch trashed interfaces")
+		return
+	}
+	dto.Paginated(c, "data fetched successfully", ifaces, dto.NewListMeta(list, total))
 }
 
 func (h *InterfaceHandler) Restore(c *gin.Context) {
@@ -238,29 +285,29 @@ func (h *InterfaceHandler) Restore(c *gin.Context) {
 	}
 	var iface models.WGInterface
 	if err := database.DB.Unscoped().First(&iface, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.ErrorResponse{Success: false, Message: "interface not found"})
+		dto.Error(c, http.StatusNotFound, "interface not found")
 		return
 	}
 	if !iface.DeletedAt.Valid {
-		c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: "interface already active", Data: iface})
+		dto.OK(c, "interface already active", iface)
 		return
 	}
 
 	if err := database.DB.Unscoped().Model(&iface).Update("deleted_at", nil).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to restore interface"})
+		dto.Error(c, http.StatusInternalServerError, "failed to restore interface")
 		return
 	}
 	// Restore peers that were trashed with this interface. Manually deleted peers
 	// can still be permanently deleted from Trash if needed.
 	if err := database.DB.Unscoped().Model(&models.Peer{}).Where("interface_id = ? AND deleted_at IS NOT NULL", iface.ID).Update("deleted_at", nil).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "interface restored but peers were not restored"})
+		dto.Error(c, http.StatusInternalServerError, "interface restored but peers were not restored")
 		return
 	}
 	if err := reconcile(iface.ID); err != nil {
-		c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: "interface restored but not applied to kernel: " + err.Error(), Data: iface})
+		dto.OK(c, "interface restored but not applied to kernel: "+err.Error(), iface)
 		return
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: "interface restored", Data: iface})
+	dto.OK(c, "interface restored", iface)
 }
 
 func (h *InterfaceHandler) Purge(c *gin.Context) {
@@ -270,23 +317,23 @@ func (h *InterfaceHandler) Purge(c *gin.Context) {
 	}
 	var iface models.WGInterface
 	if err := database.DB.Unscoped().First(&iface, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.ErrorResponse{Success: false, Message: "interface not found"})
+		dto.Error(c, http.StatusNotFound, "interface not found")
 		return
 	}
 	removeErr := wg.RemoveLink(iface.Name)
 	if err := database.DB.Unscoped().Where("interface_id = ?", iface.ID).Delete(&models.Peer{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to permanently delete interface peers"})
+		dto.Error(c, http.StatusInternalServerError, "failed to permanently delete interface peers")
 		return
 	}
 	if err := database.DB.Unscoped().Delete(&iface).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to permanently delete interface"})
+		dto.Error(c, http.StatusInternalServerError, "failed to permanently delete interface")
 		return
 	}
 	msg := "interface permanently deleted"
 	if removeErr != nil {
 		msg = "interface permanently deleted, but device cleanup failed: " + removeErr.Error()
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: msg})
+	dto.NoData(c, http.StatusOK, msg)
 }
 
 // Sync godoc
@@ -304,10 +351,10 @@ func (h *InterfaceHandler) Sync(c *gin.Context) {
 		return
 	}
 	if err := reconcile(id); err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "sync failed: " + err.Error()})
+		dto.Error(c, http.StatusInternalServerError, "sync failed: "+err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Message: "interface applied to kernel"})
+	dto.NoData(c, http.StatusOK, "interface applied to kernel")
 }
 
 // Status godoc
@@ -326,10 +373,36 @@ func (h *InterfaceHandler) Status(c *gin.Context) {
 	}
 
 	var iface models.WGInterface
-	if err := database.DB.Preload("Peers").First(&iface, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, dto.ErrorResponse{Success: false, Message: "interface not found"})
+	if err := database.DB.First(&iface, id).Error; err != nil {
+		dto.Error(c, http.StatusNotFound, "interface not found")
 		return
 	}
+
+	allowedSorts := map[string]string{
+		"id":          "id",
+		"name":        "name",
+		"assigned_ip": "assigned_ip",
+		"enabled":     "enabled",
+		"created_at":  "created_at",
+		"updated_at":  "updated_at",
+	}
+	list := dto.ParseListQuery(c, allowedSorts, "id")
+	query := database.DB.Model(&models.Peer{}).Where("interface_id = ?", id)
+	if list.Search != "" {
+		like := "%" + list.Search + "%"
+		query = query.Where("name LIKE ? OR assigned_ip LIKE ? OR allowed_ips LIKE ?", like, like, like)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to count peers")
+		return
+	}
+	var peers []models.Peer
+	if err := query.Order(list.OrderClause(allowedSorts)).Limit(list.PerPage).Offset(list.Offset).Find(&peers).Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch peers")
+		return
+	}
+	iface.Peers = peers
 
 	stats, statErr := wg.DeviceStats(iface.Name)
 	now := time.Now()
@@ -352,7 +425,7 @@ func (h *InterfaceHandler) Status(c *gin.Context) {
 	if statErr != nil {
 		resp["kernel_message"] = statErr.Error()
 	}
-	c.JSON(http.StatusOK, dto.APIResponse{Success: true, Data: resp})
+	dto.Paginated(c, "data fetched successfully", resp, dto.NewListMeta(list, total))
 }
 
 // --- helpers ---
@@ -360,7 +433,7 @@ func (h *InterfaceHandler) Status(c *gin.Context) {
 func parseID(c *gin.Context) (uint, bool) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Success: false, Message: "invalid id"})
+		dto.Error(c, http.StatusBadRequest, "invalid id")
 		return 0, false
 	}
 	return uint(id), true
@@ -374,9 +447,9 @@ func findInterface(c *gin.Context) (*models.WGInterface, error) {
 	var iface models.WGInterface
 	if err := database.DB.Preload("Peers").First(&iface, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, dto.ErrorResponse{Success: false, Message: "interface not found"})
+			dto.Error(c, http.StatusNotFound, "interface not found")
 		} else {
-			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Success: false, Message: "failed to fetch interface"})
+			dto.Error(c, http.StatusInternalServerError, "failed to fetch interface")
 		}
 		return nil, err
 	}

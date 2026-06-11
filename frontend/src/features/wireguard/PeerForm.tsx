@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DialogClose, DialogFooter } from "@/components/ui/dialog"
+import { applyServerValidationErrors } from "@/lib/api"
 
 interface Props {
   onSubmit: (values: PeerFormValues) => Promise<void> | void
@@ -18,6 +19,7 @@ export function PeerForm({ onSubmit, submitting }: Props) {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<PeerFormValues>({
     resolver: zodResolver(peerSchema),
@@ -31,8 +33,16 @@ export function PeerForm({ onSubmit, submitting }: Props) {
     },
   })
 
+  async function handleValidSubmit(values: PeerFormValues) {
+    try {
+      await onSubmit(values)
+    } catch (err) {
+      applyServerValidationErrors<PeerFormValues>(setError, err)
+    }
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(handleValidSubmit)} className="space-y-4">
       <div className="space-y-1.5">
         <Label htmlFor="name">Peer name</Label>
         <Input id="name" placeholder="laptop-andi" {...register("name")} />

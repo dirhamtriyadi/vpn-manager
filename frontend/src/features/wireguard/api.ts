@@ -4,15 +4,24 @@ import type { PeerFormValues } from "@/schemas/peer"
 import type {
   ApiResponse,
   InterfaceStatus,
+  ListParams,
+  PaginatedResult,
+  PaginationMeta,
   Peer,
   WGInterface,
 } from "./types"
 
+const emptyMeta: PaginationMeta = { page: 1, per_page: 10, total: 0, last_page: 1 }
+
+function paginated<T>(response: ApiResponse<T[]>): PaginatedResult<T> {
+  return { data: response.data ?? [], meta: response.meta ?? emptyMeta }
+}
+
 // ---- interfaces ----
 
-export async function listInterfaces(): Promise<WGInterface[]> {
-  const { data } = await api.get<ApiResponse<WGInterface[]>>("/interfaces")
-  return data.data ?? []
+export async function listInterfaces(params: ListParams = {}): Promise<PaginatedResult<WGInterface>> {
+  const { data } = await api.get<ApiResponse<WGInterface[]>>("/interfaces", { params })
+  return paginated(data)
 }
 
 export async function createInterface(
@@ -30,9 +39,9 @@ export async function deleteInterface(id: number): Promise<string | undefined> {
   return data.message
 }
 
-export async function listTrashedInterfaces(): Promise<WGInterface[]> {
-  const { data } = await api.get<ApiResponse<WGInterface[]>>("/interfaces/trash")
-  return data.data ?? []
+export async function listTrashedInterfaces(params: ListParams = {}): Promise<PaginatedResult<WGInterface>> {
+  const { data } = await api.get<ApiResponse<WGInterface[]>>("/interfaces/trash", { params })
+  return paginated(data)
 }
 
 export async function restoreInterface(id: number): Promise<string | undefined> {
@@ -54,11 +63,13 @@ export async function syncInterface(id: number): Promise<string | undefined> {
 
 export async function getInterfaceStatus(
   id: number,
-): Promise<InterfaceStatus> {
+  params: ListParams = {},
+): Promise<{ data: InterfaceStatus; meta: PaginationMeta }> {
   const { data } = await api.get<ApiResponse<InterfaceStatus>>(
     `/interfaces/${id}/status`,
+    { params },
   )
-  return data.data
+  return { data: data.data, meta: data.meta ?? emptyMeta }
 }
 
 // ---- peers ----
@@ -87,9 +98,9 @@ export async function deletePeer(peerId: number): Promise<string | undefined> {
   return data.message
 }
 
-export async function listTrashedPeers(): Promise<Peer[]> {
-  const { data } = await api.get<ApiResponse<Peer[]>>("/peers/trash")
-  return data.data ?? []
+export async function listTrashedPeers(params: ListParams = {}): Promise<PaginatedResult<Peer>> {
+  const { data } = await api.get<ApiResponse<Peer[]>>("/peers/trash", { params })
+  return paginated(data)
 }
 
 export async function restorePeer(peerId: number): Promise<string | undefined> {

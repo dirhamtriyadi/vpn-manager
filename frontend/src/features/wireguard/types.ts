@@ -40,8 +40,40 @@ export interface InterfaceStatus {
   kernel_message?: string
 }
 
+export interface PaginationMeta {
+  page: number
+  per_page: number
+  total: number
+  last_page: number
+  sort_by?: string
+  sort_order?: "asc" | "desc"
+  search?: string
+}
+
+export interface ListParams {
+  page?: number
+  per_page?: number
+  sort_by?: string
+  sort_order?: "asc" | "desc"
+  search?: string
+}
+
 export interface ApiResponse<T> {
   success: boolean
-  message?: string
+  message: string
   data: T
+  meta?: PaginationMeta
+}
+
+export interface PaginatedResult<T> {
+  data: T[]
+  meta: PaginationMeta
+}
+
+export type ValidationErrors = Record<string, string[]>
+
+export interface ApiErrorResponse {
+  success: false
+  message: string
+  errors: ValidationErrors | Array<{ field?: string; message: string }>
 }

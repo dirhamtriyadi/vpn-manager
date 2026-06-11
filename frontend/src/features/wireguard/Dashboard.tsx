@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import {
   Plus,
   RefreshCw,
@@ -9,7 +10,6 @@ import {
   Wifi,
   WifiOff,
   Archive,
-  Undo2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -50,26 +50,40 @@ import {
   deletePeer,
   getInterfaceStatus,
   listInterfaces,
-  listTrashedInterfaces,
-  listTrashedPeers,
-  purgeInterface,
-  purgePeer,
-  restoreInterface,
-  restorePeer,
   syncInterface,
   updatePeer,
 } from "./api"
-import type { InterfaceStatus, Peer, WGInterface } from "./types"
+import { ListControls } from "./ListControls"
+import { PaginationControls } from "./PaginationControls"
+import type { InterfaceStatus, ListParams, PaginationMeta, Peer, WGInterface } from "./types"
 
-function formatDeletedAt(value: WGInterface["deleted_at"] | Peer["deleted_at"]): string {
-  const raw = typeof value === "string" ? value : value?.Time
-  return raw ? new Date(raw).toLocaleString() : "—"
-}
+
+const DEFAULT_META: PaginationMeta = { page: 1, per_page: 10, total: 0, last_page: 1 }
+const DEFAULT_INTERFACE_PARAMS: Required<Pick<ListParams, "page" | "per_page" | "sort_by" | "sort_order">> & Pick<ListParams, "search"> = { page: 1, per_page: 10, sort_by: "id", sort_order: "asc", search: "" }
+const DEFAULT_PEER_PARAMS: Required<Pick<ListParams, "page" | "per_page" | "sort_by" | "sort_order">> & Pick<ListParams, "search"> = { page: 1, per_page: 10, sort_by: "id", sort_order: "asc", search: "" }
+const INTERFACE_SORT_OPTIONS = [
+  { value: "id", label: "ID" },
+  { value: "name", label: "Name" },
+  { value: "listen_port", label: "Listen port" },
+  { value: "address", label: "Address" },
+  { value: "endpoint", label: "Endpoint" },
+  { value: "enabled", label: "Enabled" },
+  { value: "created_at", label: "Created" },
+]
+const PEER_SORT_OPTIONS = [
+  { value: "id", label: "ID" },
+  { value: "name", label: "Name" },
+  { value: "assigned_ip", label: "Tunnel IP" },
+  { value: "enabled", label: "Enabled" },
+  { value: "created_at", label: "Created" },
+]
 
 export function Dashboard() {
   const [interfaces, setInterfaces] = useState<WGInterface[]>([])
-  const [trashedInterfaces, setTrashedInterfaces] = useState<WGInterface[]>([])
-  const [trashedPeers, setTrashedPeers] = useState<Peer[]>([])
+  const [interfacesMeta, setInterfacesMeta] = useState<PaginationMeta>(DEFAULT_META)
+  const [peersMeta, setPeersMeta] = useState<PaginationMeta>(DEFAULT_META)
+  const [interfaceParams, setInterfaceParams] = useState(DEFAULT_INTERFACE_PARAMS)
+  const [peerParams, setPeerParams] = useState(DEFAULT_PEER_PARAMS)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [status, setStatus] = useState<InterfaceStatus | null>(null)
   const [banner, setBanner] = useState<{ kind: "error" | "info"; text: string } | null>(null)
@@ -81,37 +95,31 @@ export function Dashboard() {
 
   const loadInterfaces = useCallback(async () => {
     try {
-      const data = await listInterfaces()
-      setInterfaces(data)
-      setSelectedId((prev) => prev ?? data[0]?.id ?? null)
+      const result = await listInterfaces(interfaceParams)
+      setInterfaces(result.data)
+      setInterfacesMeta(result.meta)
+      setSelectedId((prev) => {
+        if (prev && result.data.some((i) => i.id === prev)) return prev
+        return result.data[0]?.id ?? null
+      })
     } catch (e) {
       setBanner({ kind: "error", text: apiErrorMessage(e, "Failed to load interfaces. Is the API running?") })
     }
-  }, [])
-
-  const loadTrash = useCallback(async () => {
-    try {
-      const [ifaces, peers] = await Promise.all([listTrashedInterfaces(), listTrashedPeers()])
-      setTrashedInterfaces(ifaces)
-      setTrashedPeers(peers)
-    } catch (e) {
-      setBanner({ kind: "error", text: apiErrorMessage(e, "Failed to load trash") })
-    }
-  }, [])
+  }, [interfaceParams])
 
   const loadStatus = useCallback(async (id: number) => {
     try {
-      const data = await getInterfaceStatus(id)
-      setStatus(data)
+      const result = await getInterfaceStatus(id, peerParams)
+      setStatus(result.data)
+      setPeersMeta(result.meta)
     } catch (e) {
       setBanner({ kind: "error", text: apiErrorMessage(e, "Failed to load status") })
     }
-  }, [])
+  }, [peerParams])
 
   useEffect(() => {
     loadInterfaces()
-    loadTrash()
-  }, [loadInterfaces, loadTrash])
+  }, [loadInterfaces])
 
   // poll status every 5s for the selected interface
   useEffect(() => {
@@ -123,6 +131,10 @@ export function Dashboard() {
     const t = setInterval(() => loadStatus(selectedId), 5000)
     return () => clearInterval(t)
   }, [selectedId, loadStatus])
+
+  useEffect(() => {
+    setPeerParams((prev) => ({ ...prev, page: 1 }))
+  }, [selectedId])
 
   const iface = status?.interface
   const peers = iface?.peers ?? []
@@ -139,6 +151,7 @@ export function Dashboard() {
       }
     } catch (e) {
       setBanner({ kind: "error", text: apiErrorMessage(e, "Failed to create interface") })
+      throw e
     } finally {
       setSubmitting(false)
     }
@@ -156,6 +169,7 @@ export function Dashboard() {
       }
     } catch (e) {
       setBanner({ kind: "error", text: apiErrorMessage(e, "Failed to add peer") })
+      throw e
     } finally {
       setSubmitting(false)
     }
@@ -181,7 +195,6 @@ export function Dashboard() {
       const msg = await deletePeer(p.id)
       setBanner({ kind: "info", text: msg ?? "Peer moved to trash" })
       if (selectedId) await loadStatus(selectedId)
-      await loadTrash()
     } catch (e) {
       setBanner({ kind: "error", text: apiErrorMessage(e, "Failed to delete peer") })
     }
@@ -207,57 +220,8 @@ export function Dashboard() {
       setSelectedId(null)
       setStatus(null)
       await loadInterfaces()
-      await loadTrash()
     } catch (e) {
       setBanner({ kind: "error", text: apiErrorMessage(e, "Failed to delete interface") })
-    }
-  }
-
-  async function handleRestoreInterface(i: WGInterface) {
-    try {
-      const msg = await restoreInterface(i.id)
-      setBanner({ kind: "info", text: msg ?? "Interface restored" })
-      await loadInterfaces()
-      await loadTrash()
-      setSelectedId(i.id)
-      await loadStatus(i.id)
-    } catch (e) {
-      setBanner({ kind: "error", text: apiErrorMessage(e, "Failed to restore interface") })
-    }
-  }
-
-  async function handlePurgeInterface(i: WGInterface) {
-    if (!confirm(`Permanently delete interface "${i.name}" and all its peers? This cannot be undone.`)) return
-    try {
-      const msg = await purgeInterface(i.id)
-      setBanner({ kind: "info", text: msg ?? "Interface permanently deleted" })
-      await loadInterfaces()
-      await loadTrash()
-    } catch (e) {
-      setBanner({ kind: "error", text: apiErrorMessage(e, "Failed to permanently delete interface") })
-    }
-  }
-
-  async function handleRestorePeer(p: Peer) {
-    try {
-      const msg = await restorePeer(p.id)
-      setBanner({ kind: "info", text: msg ?? "Peer restored" })
-      if (selectedId) await loadStatus(selectedId)
-      await loadTrash()
-    } catch (e) {
-      setBanner({ kind: "error", text: apiErrorMessage(e, "Failed to restore peer") })
-    }
-  }
-
-  async function handlePurgePeer(p: Peer) {
-    if (!confirm(`Permanently delete peer "${p.name}"? This cannot be undone.`)) return
-    try {
-      const msg = await purgePeer(p.id)
-      setBanner({ kind: "info", text: msg ?? "Peer permanently deleted" })
-      if (selectedId) await loadStatus(selectedId)
-      await loadTrash()
-    } catch (e) {
-      setBanner({ kind: "error", text: apiErrorMessage(e, "Failed to permanently delete peer") })
     }
   }
 
@@ -293,6 +257,7 @@ export function Dashboard() {
             </option>
           ))}
         </select>
+        <PaginationControls meta={interfacesMeta} onPageChange={(page) => setInterfaceParams((prev) => ({ ...prev, page }))} />
 
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
@@ -311,7 +276,21 @@ export function Dashboard() {
             <InterfaceForm onSubmit={handleCreateInterface} submitting={submitting} />
           </DialogContent>
         </Dialog>
+
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/trash">
+            <Archive />
+            Trash
+          </Link>
+        </Button>
       </div>
+
+      <ListControls
+        params={interfaceParams}
+        sortOptions={INTERFACE_SORT_OPTIONS}
+        searchPlaceholder="Search interfaces..."
+        onChange={(next) => setInterfaceParams((prev) => ({ ...prev, ...next }))}
+      />
 
       {/* Interface summary */}
       {iface && (
@@ -359,7 +338,7 @@ export function Dashboard() {
 
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Peers ({peers.length})</h3>
+              <h3 className="text-sm font-semibold">Peers ({peersMeta.total})</h3>
               <Dialog open={addPeerOpen} onOpenChange={setAddPeerOpen}>
                 <DialogTrigger asChild>
                   <Button size="sm">
@@ -378,6 +357,13 @@ export function Dashboard() {
                 </DialogContent>
               </Dialog>
             </div>
+
+            <ListControls
+              params={peerParams}
+              sortOptions={PEER_SORT_OPTIONS}
+              searchPlaceholder="Search peers..."
+              onChange={(next) => setPeerParams((prev) => ({ ...prev, ...next }))}
+            />
 
             <Table>
               <TableHeader>
@@ -452,110 +438,7 @@ export function Dashboard() {
                 )}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      )}
-
-      {(trashedInterfaces.length > 0 || trashedPeers.length > 0) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Archive className="h-5 w-5" />
-              Trash
-              <Badge variant="muted">{trashedInterfaces.length + trashedPeers.length}</Badge>
-            </CardTitle>
-            <CardDescription>
-              Restore deleted items, or permanently delete them so Trash does not pile up.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Interfaces ({trashedInterfaces.length})</h3>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Address</TableHead>
-                    <TableHead>Deleted</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {trashedInterfaces.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="py-4 text-center text-muted-foreground">
-                        No deleted interfaces.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    trashedInterfaces.map((i) => (
-                      <TableRow key={i.id}>
-                        <TableCell className="font-medium">{i.name}</TableCell>
-                        <TableCell className="font-mono text-xs">{i.address}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {formatDeletedAt(i.deleted_at)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" title="Restore" onClick={() => handleRestoreInterface(i)}>
-                              <Undo2 className="text-green-600" />
-                            </Button>
-                            <Button variant="ghost" size="icon" title="Delete permanently" onClick={() => handlePurgeInterface(i)}>
-                              <Trash2 className="text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold">Peers ({trashedPeers.length})</h3>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Interface ID</TableHead>
-                    <TableHead>Tunnel IP</TableHead>
-                    <TableHead>Deleted</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {trashedPeers.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="py-4 text-center text-muted-foreground">
-                        No deleted peers.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    trashedPeers.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="font-medium">{p.name}</TableCell>
-                        <TableCell className="font-mono text-xs">{p.interface_id}</TableCell>
-                        <TableCell className="font-mono text-xs">{p.assigned_ip}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {formatDeletedAt(p.deleted_at)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" title="Restore" onClick={() => handleRestorePeer(p)}>
-                              <Undo2 className="text-green-600" />
-                            </Button>
-                            <Button variant="ghost" size="icon" title="Delete permanently" onClick={() => handlePurgePeer(p)}>
-                              <Trash2 className="text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+            <PaginationControls meta={peersMeta} onPageChange={(page) => setPeerParams((prev) => ({ ...prev, page }))} />
           </CardContent>
         </Card>
       )}
