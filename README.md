@@ -1,0 +1,465 @@
+# WireGuard Panel
+
+Monorepo aplikasi panel web untuk mengelola WireGuard server dan peer dari browser. Backend membuat interface WireGuard, generate key, generate config/QR client, membaca status handshake, dan menerapkan perubahan langsung ke kernel Linux via netlink. Frontend menyediakan dashboard React untuk membuat interface, menambah peer, melihat status, copy/download config, script MikroTik RouterOS, serta Trash/Restore.
+
+## Fitur
+
+- Buat WireGuard interface/server dari UI.
+- Generate keypair server/client otomatis.
+- Auto-assign IP tunnel peer.
+- Generate client `.conf` dan QR code.
+- Dashboard status live: online/offline, latest handshake, RX/TX.
+- Enable/disable peer.
+- Add/edit/delete peer secara incremental agar peer lain tidak ikut disconnect.
+- Soft delete / Trash:
+  - Delete biasa masuk Trash.
+  - Restore peer/interface.
+  - Delete permanently untuk membersihkan Trash.
+- Script MikroTik RouterOS 7 untuk peer:
+  - setup WireGuard client di MikroTik.
+  - teardown script untuk membersihkan konfigurasi.
+  - route otomatis berdasarkan allowed-address.
+- Swagger UI untuk API backend.
+
+## Struktur monorepo
+
+```text
+wireguard/
+├── backend/              # Go API: Gin, GORM, Postgres, wgctrl/netlink
+│   ├── main.go
+│   ├── config/
+│   ├── database/
+│   ├── dto/
+│   ├── handlers/
+│   ├── middleware/
+│   ├── models/
+│   ├── routes/
+│   ├── wg/
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── .env.example
+│   └── README.md
+├── frontend/             # React UI: Vite, TypeScript, Tailwind, shadcn-style UI
+│   ├── src/
+│   ├── package.json
+│   ├── .env.example
+│   └── README.md
+└── README.md             # File ini
+```
+
+## Stack
+
+Backend:
+
+- Go 1.22
+- Gin
+- GORM
+- PostgreSQL
+- WireGuard `wgctrl`
+- Linux netlink via `vishvananda/netlink`
+- Swagger / swaggo
+
+Frontend:
+
+- React 18
+- TypeScript
+- Vite
+- Tailwind CSS
+- react-hook-form
+- Zod
+- Axios
+- lucide-react
+
+## Kebutuhan host
+
+Backend harus berjalan di Linux yang punya dukungan WireGuard kernel.
+
+Install/cek di host:
+
+```bash
+sudo modprobe wireguard
+lsmod | grep wireguard
+```
+
+Backend perlu akses netlink untuk membuat interface WireGuard, jadi proses/container perlu:
+
+```text
+CAP_NET_ADMIN
+```
+
+Jika ingin client VPN mengakses LAN/internet lewat server, aktifkan IP forwarding dan NAT di host WireGuard:
+
+```bash
+sudo sysctl -w net.ipv4.ip_forward=1
+```
+
+Contoh NAT dengan iptables, sesuaikan interface LAN/WAN host:
+
+```bash
+sudo iptables -t nat -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE
+```
+
+## Quick start development
+
+### 1. Backend
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+Edit `.env` sesuai environment:
+
+```env
+SERVER_PORT=8080
+GIN_MODE=debug
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=wg_panel
+DB_SSLMODE=disable
+DEFAULT_ENDPOINT=192.168.10.10
+CORS_ALLOW_ORIGINS=http://localhost:5173
+```
+
+Jalankan PostgreSQL sendiri, atau pakai compose backend:
+
+```bash
+cd backend
+docker compose up -d db
+```
+
+Jalankan API secara lokal:
+
+```bash
+cd backend
+go mod download
+sudo go run main.go
+```
+
+Kenapa `sudo`? Karena backend perlu membuat/mengubah interface WireGuard di kernel.
+
+Swagger:
+
+```text
+http://localhost:8080/swagger/index.html
+```
+
+API base:
+
+```text
+http://localhost:8080/api/v1
+```
+
+### 2. Frontend
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev -- --host 0.0.0.0
+```
+
+Default `.env` frontend:
+
+```env
+VITE_API_BASE_URL=http://localhost:8080/api/v1
+```
+
+Buka:
+
+```text
+http://localhost:5173
+```
+
+## Menjalankan backend dengan Docker Compose
+
+Dari folder backend:
+
+```bash
+cd backend
+docker compose up --build
+```
+
+Catatan penting:
+
+- Service `api` memakai `network_mode: host`.
+- Service `api` diberi capability `NET_ADMIN`.
+- Host tetap harus punya module WireGuard.
+- Compose saat ini menjalankan PostgreSQL di port host `5434`.
+
+Jika frontend berjalan dari host lain, sesuaikan:
+
+```env
+CORS_ALLOW_ORIGINS=http://IP_FRONTEND:5173
+```
+
+Dan di frontend:
+
+```env
+VITE_API_BASE_URL=http://IP_BACKEND:8083/api/v1
+```
+
+## Build production
+
+Backend:
+
+```bash
+cd backend
+go test ./...
+go build -o wg-panel ./main.go
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm run lint
+npm run build
+```
+
+Preview frontend build:
+
+```bash
+npm run preview -- --host 0.0.0.0
+```
+
+## Topologi contoh lokal
+
+Contoh topologi yang cocok untuk simulasi lokal:
+
+```text
+ONT ISP/router
+  |
+MikroTik hAP ac2
+  | LAN 192.168.10.0/24
+Mini PC / WireGuard server / WG Panel
+  IP: 192.168.10.10
+  UDP WireGuard: 51820
+```
+
+Untuk simulasi lokal, endpoint WireGuard di panel bisa diisi:
+
+```text
+192.168.10.10:51820
+```
+
+atau jika field host dan port terpisah:
+
+```text
+Endpoint/Host: 192.168.10.10
+Listen Port: 51820
+```
+
+Untuk akses dari internet, endpoint harus IP publik/DDNS, bukan IP private seperti `192.168.x.x`.
+
+## Alur penggunaan
+
+1. Buka frontend.
+2. Klik `New interface`.
+3. Isi contoh:
+
+```text
+Name: wg0
+Listen Port: 51820
+Address: 10.8.0.1/24
+Endpoint: 192.168.10.10
+DNS: 1.1.1.1
+MTU: 1420
+```
+
+4. Klik `Add peer`.
+5. Buka tombol QR/config pada peer.
+6. Import config ke client WireGuard, atau copy script MikroTik RouterOS jika peer akan dipakai di MikroTik.
+7. Cek status handshake di dashboard.
+
+## MikroTik RouterOS peer script
+
+Panel menyediakan script RouterOS 7 untuk membuat MikroTik sebagai WireGuard client.
+
+Contoh hasil yang diharapkan:
+
+```routeros
+/interface/wireguard/add name="wg-router" mtu=1420 private-key="..." comment="wg-panel wg-router"
+/ip/address/add address=10.8.0.2/32 interface="wg-router" comment="wg-panel wg-router"
+/interface/wireguard/peers/add interface="wg-router" public-key="..." endpoint-address=192.168.10.10 endpoint-port=51820 allowed-address=10.8.0.0/24 persistent-keepalive=25s comment="wg-panel wg-router" preshared-key="..."
+/ip/route/add dst-address=10.8.0.0/24 gateway="wg-router" comment="wg-panel wg-router"
+/ping 10.8.0.1 count=5
+```
+
+Catatan:
+
+- Jangan commit private key/preshared key asli ke GitHub.
+- `allowed-address` RouterOS harus tanpa spasi setelah koma jika berisi banyak CIDR, contoh:
+
+```routeros
+allowed-address=0.0.0.0/0,::/0
+```
+
+- Untuk test lokal, mulai dari:
+
+```routeros
+allowed-address=10.8.0.0/24
+```
+
+Cek di MikroTik:
+
+```routeros
+/interface/wireguard/peers/print detail
+/ping 10.8.0.1 count=5
+```
+
+Handshake berhasil jika muncul `last-handshake`, `rx`, dan `tx`.
+
+## Trash / soft delete
+
+Delete biasa tidak langsung menghapus permanen.
+
+Peer:
+
+```text
+Delete peer -> masuk Trash -> peer dicabut dari kernel WireGuard
+Restore peer -> peer aktif lagi -> peer dimasukkan kembali ke kernel
+Delete permanently -> record peer dihapus permanen dari database
+```
+
+Interface:
+
+```text
+Delete interface -> masuk Trash -> WireGuard device dihapus dari kernel -> peers ikut masuk Trash
+Restore interface -> interface dan peers direstore -> apply ulang ke kernel
+Delete permanently -> interface dan peers dihapus permanen dari database
+```
+
+Di dashboard akan muncul section `Trash` jika ada item terhapus.
+
+## API ringkas
+
+Base path:
+
+```text
+/api/v1
+```
+
+Interface:
+
+| Method | Path | Keterangan |
+|---|---|---|
+| GET | `/interfaces` | List interface aktif |
+| POST | `/interfaces` | Buat interface |
+| GET | `/interfaces/:id` | Detail interface |
+| PUT | `/interfaces/:id` | Update interface |
+| DELETE | `/interfaces/:id` | Soft delete interface |
+| POST | `/interfaces/:id/sync` | Full apply/reconcile ke kernel |
+| GET | `/interfaces/:id/status` | Status live interface + peers |
+| GET | `/interfaces/trash` | List interface di Trash |
+| POST | `/interfaces/:id/restore` | Restore interface |
+| DELETE | `/interfaces/:id/purge` | Delete permanen interface |
+
+Peer:
+
+| Method | Path | Keterangan |
+|---|---|---|
+| GET | `/interfaces/:id/peers` | List peers aktif di interface |
+| POST | `/interfaces/:id/peers` | Tambah peer |
+| PUT | `/peers/:peerId` | Update peer |
+| DELETE | `/peers/:peerId` | Soft delete peer |
+| GET | `/peers/:peerId/config` | Download config `.conf` |
+| GET | `/peers/:peerId/qrcode` | QR code config |
+| GET | `/peers/trash` | List peer di Trash |
+| POST | `/peers/:peerId/restore` | Restore peer |
+| DELETE | `/peers/:peerId/purge` | Delete permanen peer |
+
+## Catatan koneksi peer
+
+Panel sekarang menerapkan perubahan peer secara incremental:
+
+```text
+Tambah peer     -> hanya peer baru yang ditambahkan
+Edit peer       -> hanya peer itu yang di-update
+Delete peer     -> hanya peer itu yang dicabut dari kernel
+Full sync/apply -> replace seluruh daftar peer sebagai recovery/manual reconcile
+```
+
+Artinya tambah/hapus peer tidak seharusnya membuat peer lain disconnect.
+
+## Troubleshooting
+
+### Peer tidak handshake
+
+Cek backend/server:
+
+```bash
+sudo wg show
+```
+
+Cek port listen:
+
+```bash
+sudo ss -lunp | grep 51820
+```
+
+Cek firewall host mengizinkan UDP WireGuard.
+
+### MikroTik tidak bisa ping server tunnel
+
+Dari MikroTik:
+
+```routeros
+/ping 192.168.10.10 count=5
+/interface/wireguard/peers/print detail
+/ping 10.8.0.1 count=5
+```
+
+Jika `last-handshake` kosong:
+
+- endpoint salah.
+- public key server/client tidak cocok.
+- preshared key tidak cocok.
+- UDP 51820 terblokir.
+- peer belum terdaftar di panel.
+
+### Akses dari luar rumah tidak jalan
+
+Jika ISP memakai CGNAT atau WAN router mendapat IP private, port forward langsung tidak cukup. Opsi:
+
+- minta public IP ke ISP.
+- bridge ONT agar router mendapat public IP.
+- pakai VPS relay WireGuard.
+- pakai overlay VPN seperti Tailscale/ZeroTier/NetBird.
+
+## Keamanan
+
+- Jangan commit file `.env` asli.
+- Jangan commit private key WireGuard atau preshared key asli.
+- Batasi CORS di production.
+- Jalankan backend hanya di host terpercaya karena punya `CAP_NET_ADMIN`.
+- Backup database sebelum purge/delete permanen.
+
+## Development notes
+
+Command yang sering dipakai:
+
+```bash
+# frontend
+cd frontend
+npm run lint
+npm run build
+
+# backend
+cd backend
+go test ./...
+go build ./...
+```
+
+Jika Swagger perlu digenerate ulang:
+
+```bash
+cd backend
+swag init -g main.go -o docs
+```
+
+## License
+
+Belum ditentukan. Tambahkan file `LICENSE` jika repository akan dipublikasikan/open-source.
