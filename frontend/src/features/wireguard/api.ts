@@ -1,4 +1,4 @@
-import { api, API_BASE_URL } from "@/lib/api"
+import { api } from "@/lib/api"
 import type { InterfaceFormValues } from "@/schemas/interface"
 import type { PeerFormValues } from "@/schemas/peer"
 import type {
@@ -131,11 +131,12 @@ export async function getPeerConfigText(peerId: number): Promise<string> {
   return data
 }
 
-// Direct URLs (the backend sets attachment / png headers).
-export function peerConfigUrl(peerId: number): string {
-  return `${API_BASE_URL}/peers/${peerId}/config`
-}
-
-export function peerQrCodeUrl(peerId: number): string {
-  return `${API_BASE_URL}/peers/${peerId}/qrcode`
+// Fetched through the axios instance so the bearer token is attached. A plain
+// <a href>/<img src> to these endpoints would omit the Authorization header and
+// be rejected by the backend with "authentication required".
+export async function getPeerQrCodeBlob(peerId: number): Promise<Blob> {
+  const { data } = await api.get<Blob>(`/peers/${peerId}/qrcode`, {
+    responseType: "blob",
+  })
+  return data
 }

@@ -9,11 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  getPeerConfigText,
-  peerConfigUrl,
-  peerQrCodeUrl,
-} from "./api"
+import { getPeerConfigText, getPeerQrCodeBlob } from "./api"
 import type { Peer, WGInterface } from "./types"
 
 interface Props {
@@ -125,6 +121,7 @@ function buildRouterOSTeardownScript(peer: Peer): string {
 
 export function PeerConfigDialog({ iface, peer, onClose }: Props) {
   const [config, setConfig] = useState("")
+  const [qrUrl, setQrUrl] = useState("")
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [copiedScript, setCopiedScript] = useState(false)
@@ -143,6 +140,39 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
       .catch(() => setConfig("# Failed to load config"))
       .finally(() => setLoading(false))
   }, [peer])
+
+  // Fetch the QR PNG through the authenticated axios instance and expose it as
+  // an object URL; a plain <img src> to the endpoint omits the bearer token.
+  useEffect(() => {
+    if (!peer) return
+    let objectUrl = ""
+    let active = true
+    getPeerQrCodeBlob(peer.id)
+      .then((blob) => {
+        if (!active) return
+        objectUrl = URL.createObjectURL(blob)
+        setQrUrl(objectUrl)
+      })
+      .catch(() => active && setQrUrl(""))
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+      setQrUrl("")
+    }
+  }, [peer])
+
+  function downloadConfig() {
+    if (!peer) return
+    const blob = new Blob([config], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `${peer.name}.conf`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
 
   const routerOSScript = useMemo(() => {
     if (!peer) return ""
@@ -207,11 +237,17 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
             {mode === "conf" ? (
               <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
                 <div className="flex items-start justify-center">
-                  <img
-                    src={peerQrCodeUrl(peer.id)}
-                    alt="WireGuard config QR"
-                    className="h-[200px] w-[200px] rounded-md border bg-white p-2"
-                  />
+                  {qrUrl ? (
+                    <img
+                      src={qrUrl}
+                      alt="WireGuard config QR"
+                      className="h-[200px] w-[200px] rounded-md border bg-white p-2"
+                    />
+                  ) : (
+                    <div className="flex h-[200px] w-[200px] items-center justify-center rounded-md border bg-white text-xs text-muted-foreground">
+                      {loading ? "Loading..." : "QR unavailable"}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Textarea
@@ -229,11 +265,14 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
                       {copied ? <Check /> : <Copy />}
                       {copied ? "Copied" : "Copy"}
                     </Button>
-                    <Button asChild size="sm">
-                      <a href={peerConfigUrl(peer.id)} download={`${peer.name}.conf`}>
-                        <Download />
-                        Download .conf
-                      </a>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={downloadConfig}
+                      disabled={loading}
+                    >
+                      <Download />
+                      Download .conf
                     </Button>
                   </div>
                 </div>
