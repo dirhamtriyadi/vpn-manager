@@ -9,19 +9,19 @@ import (
 // Peer represents a WireGuard client attached to an interface.
 type Peer struct {
 	ID          uint   `json:"id" gorm:"primaryKey"`
-	InterfaceID uint   `json:"interface_id" gorm:"index;not null"`
+	InterfaceID uint   `json:"interface_id" gorm:"index;not null;uniqueIndex:idx_peers_interface_allowed_ips;uniqueIndex:idx_peers_interface_assigned_ip"`
 	Name        string `json:"name" gorm:"size:128;not null"`
 
 	// PrivateKey is stored only when the server generated the keypair, so we can
 	// render a complete client config / QR. It is never exposed in list/detail JSON.
 	PrivateKey   string `json:"-" gorm:"size:64"`
-	PublicKey    string `json:"public_key" gorm:"size:64;not null"`
+	PublicKey    string `json:"public_key" gorm:"size:64;not null;uniqueIndex"`
 	PresharedKey string `json:"-" gorm:"size:64"`
 
 	// AllowedIPs are the IPs routed TO this peer on the server (usually its /32).
-	AllowedIPs string `json:"allowed_ips" gorm:"size:255;not null"` // e.g. 10.8.0.2/32
+	AllowedIPs string `json:"allowed_ips" gorm:"size:255;not null;uniqueIndex:idx_peers_interface_allowed_ips"` // e.g. 10.8.0.2/32
 	// AssignedIP is the tunnel address handed to the client.
-	AssignedIP string `json:"assigned_ip" gorm:"size:64;not null"` // e.g. 10.8.0.2
+	AssignedIP string `json:"assigned_ip" gorm:"size:64;not null;uniqueIndex:idx_peers_interface_assigned_ip"` // e.g. 10.8.0.2
 	// ClientAllowedIPs are what the client routes through the tunnel.
 	ClientAllowedIPs    string `json:"client_allowed_ips" gorm:"size:255;not null;default:'0.0.0.0/0, ::/0'"`
 	PersistentKeepalive int    `json:"persistent_keepalive" gorm:"default:25"`

@@ -10,9 +10,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  downloadPeerConfigFile,
   getPeerConfigText,
-  peerConfigUrl,
-  peerQrCodeUrl,
+  getPeerQrCodeObjectUrl,
 } from "./api"
 import type { Peer, WGInterface } from "./types"
 
@@ -129,6 +129,8 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
   const [copied, setCopied] = useState(false)
   const [copiedScript, setCopiedScript] = useState(false)
   const [copiedTeardown, setCopiedTeardown] = useState(false)
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
   const [mode, setMode] = useState<"conf" | "routeros">("conf")
   const [routerOSMode, setRouterOSMode] = useState<"install" | "teardown">("install")
 
@@ -136,12 +138,27 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
     if (!peer) return
     setLoading(true)
     setConfig("")
+    setQrCodeUrl(null)
+    setDownloadError(null)
     setMode("conf")
     setRouterOSMode("install")
+    let active = true
+    let objectUrl: string | null = null
     getPeerConfigText(peer.id)
-      .then(setConfig)
-      .catch(() => setConfig("# Failed to load config"))
-      .finally(() => setLoading(false))
+      .then((value) => active && setConfig(value))
+      .catch(() => active && setConfig("# Failed to load config"))
+      .finally(() => active && setLoading(false))
+    getPeerQrCodeObjectUrl(peer.id)
+      .then((url) => {
+        objectUrl = url
+        if (active) setQrCodeUrl(url)
+        else URL.revokeObjectURL(url)
+      })
+      .catch(() => active && setQrCodeUrl(null))
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
   }, [peer])
 
   const routerOSScript = useMemo(() => {
@@ -170,6 +187,16 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
     await navigator.clipboard.writeText(routerOSTeardownScript)
     setCopiedTeardown(true)
     setTimeout(() => setCopiedTeardown(false), 1500)
+  }
+
+  async function downloadConfig() {
+    if (!peer) return
+    setDownloadError(null)
+    try {
+      await downloadPeerConfigFile(peer.id, `${peer.name}.conf`)
+    } catch {
+      setDownloadError("Failed to download config")
+    }
   }
 
   return (
@@ -207,11 +234,17 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
             {mode === "conf" ? (
               <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
                 <div className="flex items-start justify-center">
-                  <img
-                    src={peerQrCodeUrl(peer.id)}
-                    alt="WireGuard config QR"
-                    className="h-[200px] w-[200px] rounded-md border bg-white p-2"
-                  />
+                  {qrCodeUrl ? (
+                    <img
+                      src={qrCodeUrl}
+                      alt="WireGuard config QR"
+                      className="h-[200px] w-[200px] rounded-md border bg-white p-2"
+                    />
+                  ) : (
+                    <div className="flex h-[200px] w-[200px] items-center justify-center rounded-md border bg-white p-2 text-center text-xs text-muted-foreground">
+                      QR unavailable
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Textarea
@@ -229,13 +262,14 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
                       {copied ? <Check /> : <Copy />}
                       {copied ? "Copied" : "Copy"}
                     </Button>
-                    <Button asChild size="sm">
-                      <a href={peerConfigUrl(peer.id)} download={`${peer.name}.conf`}>
-                        <Download />
-                        Download .conf
-                      </a>
+                    <Button type="button" size="sm" onClick={downloadConfig}>
+                      <Download />
+                      Download .conf
                     </Button>
                   </div>
+                  {downloadError && (
+                    <p className="text-xs text-destructive">{downloadError}</p>
+                  )}
                 </div>
               </div>
             ) : (

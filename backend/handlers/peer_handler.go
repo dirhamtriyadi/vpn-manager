@@ -116,6 +116,14 @@ func (h *PeerHandler) Create(c *gin.Context) {
 		peer.PrivateKey = kp.PrivateKey
 		peer.PublicKey = kp.PublicKey
 	}
+	if err := wg.ValidatePublicKey(peer.PublicKey); err != nil {
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if err := wg.ValidateCIDRList(peer.ClientAllowedIPs); err != nil {
+		dto.Error(c, http.StatusUnprocessableEntity, "invalid client_allowed_ips: "+err.Error())
+		return
+	}
 
 	if req.UsePresharedKey {
 		psk, err := wg.GeneratePresharedKey()
@@ -142,6 +150,14 @@ func (h *PeerHandler) Create(c *gin.Context) {
 	}
 	peer.AssignedIP = assigned
 	peer.AllowedIPs = assigned + "/32"
+	if err := wg.ValidateIPInCIDR(peer.AssignedIP, iface.Address); err != nil {
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if err := ensurePeerUnique(peer); err != nil {
+		dto.Error(c, http.StatusConflict, err.Error())
+		return
+	}
 
 	if err := database.DB.Create(&peer).Error; err != nil {
 		dto.Error(c, http.StatusInternalServerError, "failed to create peer (public key or IP may already exist)")
@@ -184,6 +200,10 @@ func (h *PeerHandler) Update(c *gin.Context) {
 	peer.Name = req.Name
 	if req.ClientAllowedIPs != "" {
 		peer.ClientAllowedIPs = req.ClientAllowedIPs
+	}
+	if err := wg.ValidateCIDRList(peer.ClientAllowedIPs); err != nil {
+		dto.Error(c, http.StatusUnprocessableEntity, "invalid client_allowed_ips: "+err.Error())
+		return
 	}
 	peer.PersistentKeepalive = req.PersistentKeepalive
 	if req.Enabled != nil {
@@ -382,6 +402,29 @@ func findPeerWithScope(c *gin.Context, db *gorm.DB) (*models.Peer, error) {
 		return nil, err
 	}
 	return &peer, nil
+}
+
+func ensurePeerUnique(peer models.Peer) error {
+	var count int64
+	if err := database.DB.Unscoped().Model(&models.Peer{}).
+		Where("public_key = ?", peer.PublicKey).
+		Count(&count).Error; err != nil {
+		return errors.New("failed to check duplicate public key")
+	}
+	if count > 0 {
+		return errors.New("peer public key already exists")
+	}
+
+	count = 0
+	if err := database.DB.Unscoped().Model(&models.Peer{}).
+		Where("interface_id = ? AND assigned_ip = ?", peer.InterfaceID, peer.AssignedIP).
+		Count(&count).Error; err != nil {
+		return errors.New("failed to check duplicate assigned IP")
+	}
+	if count > 0 {
+		return errors.New("assigned IP already exists on this interface")
+	}
+	return nil
 }
 
 func defaultString(v, fallback string) string {

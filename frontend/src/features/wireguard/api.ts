@@ -1,4 +1,4 @@
-import { api, API_BASE_URL } from "@/lib/api"
+import { api } from "@/lib/api"
 import type { InterfaceFormValues } from "@/schemas/interface"
 import type { PeerFormValues } from "@/schemas/peer"
 import type {
@@ -131,11 +131,25 @@ export async function getPeerConfigText(peerId: number): Promise<string> {
   return data
 }
 
-// Direct URLs (the backend sets attachment / png headers).
-export function peerConfigUrl(peerId: number): string {
-  return `${API_BASE_URL}/peers/${peerId}/config`
+export async function getPeerQrCodeObjectUrl(peerId: number): Promise<string> {
+  const { data } = await api.get<Blob>(`/peers/${peerId}/qrcode`, {
+    responseType: "blob",
+  })
+  return URL.createObjectURL(data)
 }
 
-export function peerQrCodeUrl(peerId: number): string {
-  return `${API_BASE_URL}/peers/${peerId}/qrcode`
+export async function downloadPeerConfigFile(peerId: number, filename: string): Promise<void> {
+  const config = await getPeerConfigText(peerId)
+  const blob = new Blob([config], { type: "text/plain;charset=utf-8" })
+  const url = URL.createObjectURL(blob)
+  try {
+    const link = document.createElement("a")
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  } finally {
+    URL.revokeObjectURL(url)
+  }
 }

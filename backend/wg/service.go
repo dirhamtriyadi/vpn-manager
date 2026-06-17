@@ -209,6 +209,44 @@ func RemovePeerDeviceConfig(publicKey string) (wgtypes.Config, error) {
 	}, nil
 }
 
+// ValidatePublicKey checks that a user-supplied peer public key is a valid
+// WireGuard base64 key before the peer is persisted.
+func ValidatePublicKey(publicKey string) error {
+	if strings.TrimSpace(publicKey) == "" {
+		return nil
+	}
+	if _, err := wgtypes.ParseKey(publicKey); err != nil {
+		return fmt.Errorf("invalid public key: %w", err)
+	}
+	return nil
+}
+
+// ValidateCIDRList checks comma-separated WireGuard AllowedIPs values.
+func ValidateCIDRList(list string) error {
+	_, err := parseCIDRList(list)
+	return err
+}
+
+// ValidateIPInCIDR checks that an assigned peer IP belongs to the parent
+// interface subnet. The IP must be a host address, not the server address.
+func ValidateIPInCIDR(assignedIP, serverCIDR string) error {
+	assigned := net.ParseIP(strings.TrimSpace(assignedIP))
+	if assigned == nil {
+		return fmt.Errorf("invalid assigned IP %q", assignedIP)
+	}
+	serverIP, ipNet, err := net.ParseCIDR(strings.TrimSpace(serverCIDR))
+	if err != nil {
+		return fmt.Errorf("invalid interface address %q: %w", serverCIDR, err)
+	}
+	if !ipNet.Contains(assigned) {
+		return fmt.Errorf("assigned IP %s is outside interface subnet %s", assigned.String(), ipNet.String())
+	}
+	if assigned.Equal(serverIP) || assigned.Equal(ipNet.IP) {
+		return fmt.Errorf("assigned IP %s is reserved", assigned.String())
+	}
+	return nil
+}
+
 func buildPeerConfig(p models.Peer) (wgtypes.PeerConfig, error) {
 	pub, err := wgtypes.ParseKey(p.PublicKey)
 	if err != nil {

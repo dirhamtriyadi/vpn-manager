@@ -74,3 +74,24 @@ func TestRemovePeerDeviceConfigIsIncremental(t *testing.T) {
 		t.Fatalf("peer.Remove = false, want true")
 	}
 }
+
+func TestValidatePublicKeyRejectsInvalidKey(t *testing.T) {
+	if err := ValidatePublicKey("not-a-wireguard-key"); err == nil {
+		t.Fatalf("ValidatePublicKey() error = nil, want invalid key error")
+	}
+}
+
+func TestValidateCIDRListRejectsInvalidCIDR(t *testing.T) {
+	if err := ValidateCIDRList("0.0.0.0/0, 999.999.999.999/99"); err == nil {
+		t.Fatalf("ValidateCIDRList() error = nil, want invalid CIDR error")
+	}
+}
+
+func TestIPInCIDRRequiresAssignedIPInsideInterfaceSubnet(t *testing.T) {
+	if err := ValidateIPInCIDR("10.9.0.2", "10.8.0.1/24"); err == nil {
+		t.Fatalf("ValidateIPInCIDR() error = nil, want outside subnet error")
+	}
+	if err := ValidateIPInCIDR("10.8.0.2", "10.8.0.1/24"); err != nil {
+		t.Fatalf("ValidateIPInCIDR() error = %v, want nil", err)
+	}
+}
