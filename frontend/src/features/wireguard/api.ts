@@ -131,11 +131,19 @@ export async function getPeerConfigText(peerId: number): Promise<string> {
   return data
 }
 
-export async function getPeerQrCodeObjectUrl(peerId: number): Promise<string> {
+// Fetched through the axios instance so the bearer token is attached. A plain
+// <a href>/<img src> to these endpoints would omit the Authorization header and
+// be rejected by the backend with "authentication required".
+export async function getPeerQrCodeBlob(peerId: number): Promise<Blob> {
   const { data } = await api.get<Blob>(`/peers/${peerId}/qrcode`, {
     responseType: "blob",
   })
-  return URL.createObjectURL(data)
+  return data
+}
+
+export async function getPeerQrCodeObjectUrl(peerId: number): Promise<string> {
+  const blob = await getPeerQrCodeBlob(peerId)
+  return URL.createObjectURL(blob)
 }
 
 export async function downloadPeerConfigFile(peerId: number, filename: string): Promise<void> {

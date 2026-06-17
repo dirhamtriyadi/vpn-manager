@@ -161,6 +161,7 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
     }
   }, [peer])
 
+
   const routerOSScript = useMemo(() => {
     if (!peer) return ""
     return buildRouterOSScript(iface, peer, config)
@@ -242,7 +243,7 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
                     />
                   ) : (
                     <div className="flex h-[200px] w-[200px] items-center justify-center rounded-md border bg-white p-2 text-center text-xs text-muted-foreground">
-                      QR unavailable
+                      {loading ? "Loading..." : "QR unavailable"}
                     </div>
                   )}
                 </div>
@@ -262,7 +263,12 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
                       {copied ? <Check /> : <Copy />}
                       {copied ? "Copied" : "Copy"}
                     </Button>
-                    <Button type="button" size="sm" onClick={downloadConfig}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={downloadConfig}
+                      disabled={loading}
+                    >
                       <Download />
                       Download .conf
                     </Button>
