@@ -15,11 +15,52 @@ import { listVPNProtocols } from "./api"
 import type { VPNProtocolInfo } from "./types"
 
 const fallbackProtocols: VPNProtocolInfo[] = [
-  { id: "wireguard", label: "WireGuard", available: true, legacy_insecure: false },
-  { id: "openvpn", label: "OpenVPN", available: false, legacy_insecure: false },
-  { id: "l2tp_ipsec", label: "L2TP/IPsec", available: false, legacy_insecure: false },
-  { id: "sstp", label: "SSTP", available: false, legacy_insecure: false },
-  { id: "pptp", label: "PPTP", available: false, legacy_insecure: true },
+  {
+    id: "wireguard",
+    label: "WireGuard",
+    available: true,
+    legacy_insecure: false,
+    runtime_strategy: "host_kernel_netlink",
+    config_download: true,
+    qr_code: true,
+    requires_certificates: false,
+  },
+  {
+    id: "openvpn",
+    label: "OpenVPN",
+    available: false,
+    legacy_insecure: false,
+    config_download: false,
+    qr_code: false,
+    requires_certificates: true,
+  },
+  {
+    id: "l2tp_ipsec",
+    label: "L2TP/IPsec",
+    available: false,
+    legacy_insecure: false,
+    config_download: false,
+    qr_code: false,
+    requires_certificates: false,
+  },
+  {
+    id: "sstp",
+    label: "SSTP",
+    available: false,
+    legacy_insecure: false,
+    config_download: false,
+    qr_code: false,
+    requires_certificates: true,
+  },
+  {
+    id: "pptp",
+    label: "PPTP",
+    available: false,
+    legacy_insecure: true,
+    config_download: false,
+    qr_code: false,
+    requires_certificates: false,
+  },
 ]
 
 export function ProtocolSelector() {
@@ -88,6 +129,18 @@ export function ProtocolSelector() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
+              {protocol.runtime_strategy && (
+                <div className="rounded-md border bg-muted/50 p-2 text-xs text-muted-foreground">
+                  Runtime: <span className="font-mono">{protocol.runtime_strategy}</span>
+                </div>
+              )}
+              {protocol.available && (protocol.config_download || protocol.qr_code || protocol.requires_certificates) && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {protocol.config_download && <Badge variant="outline">Config download</Badge>}
+                  {protocol.qr_code && <Badge variant="outline">QR code</Badge>}
+                  {protocol.requires_certificates && <Badge variant="outline">Certificates</Badge>}
+                </div>
+              )}
               {protocol.legacy_insecure && (
                 <div className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />

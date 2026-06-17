@@ -1,4 +1,4 @@
-# WireGuard Panel — Backend (Gin + GORM + Postgres + swaggo + validator)
+# VPN Manager — Backend (Gin + GORM + Postgres + swaggo + validator)
 
 A management API for a WireGuard VPN concentrator. You manage **interfaces**
 (the server side) and **peers** (clients) over HTTP — no `wg` / `wg-quick` CLI.

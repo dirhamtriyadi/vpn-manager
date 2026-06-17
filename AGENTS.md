@@ -1,4 +1,4 @@
-# AGENTS.md - WireGuard Panel
+# AGENTS.md - VPN Manager
 
 ## Scope
 

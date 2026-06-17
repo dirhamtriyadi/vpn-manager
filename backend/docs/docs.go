@@ -680,7 +680,7 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "localhost:8080",
 	BasePath:         "/api/v1",
 	Schemes:          []string{"http", "https"},
-	Title:            "WireGuard Panel API",
+	Title:            "VPN Manager API",
 	Description:      "Manage a WireGuard VPN concentrator (interfaces & peers) without touching the CLI.\nKeys, client configs and QR codes are generated server-side; peers are pushed to the kernel via netlink.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,

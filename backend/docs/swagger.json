@@ -6,7 +6,7 @@
     "swagger": "2.0",
     "info": {
         "description": "Manage a WireGuard VPN concentrator (interfaces \u0026 peers) without touching the CLI.\nKeys, client configs and QR codes are generated server-side; peers are pushed to the kernel via netlink.",
-        "title": "WireGuard Panel API",
+        "title": "VPN Manager API",
         "contact": {
             "name": "API Support",
             "email": "support@example.com"

@@ -12,6 +12,9 @@ type fakeDriver struct {
 }
 
 func (d fakeDriver) Protocol() models.VPNProtocol { return d.protocol }
+func (d fakeDriver) Capabilities() ProtocolCapabilities {
+	return ProtocolCapabilities{RuntimeStrategy: "test", ConfigDownload: true}
+}
 func (d fakeDriver) Status(instanceID uint) (InstanceStatus, error) {
 	return InstanceStatus{Protocol: d.protocol, Up: true}, nil
 }
@@ -23,6 +26,7 @@ func (d fakeDriver) GenerateUserConfig(userID uint) ([]byte, string, error) {
 type badDriver struct{}
 
 func (d badDriver) Protocol() models.VPNProtocol { return models.ProtocolWireGuard }
+func (d badDriver) Capabilities() ProtocolCapabilities { return ProtocolCapabilities{} }
 func (d badDriver) Status(instanceID uint) (InstanceStatus, error) {
 	return InstanceStatus{}, errors.New("boom")
 }
@@ -61,5 +65,29 @@ func TestRegistryRejectsNilDriver(t *testing.T) {
 	registry := NewRegistry()
 	if err := registry.Register(nil); err == nil {
 		t.Fatal("expected nil driver registration to fail")
+	}
+}
+
+func TestNewDefaultRegistryIncludesWireGuardDriver(t *testing.T) {
+	registry, err := NewDefaultRegistry()
+	if err != nil {
+		t.Fatalf("NewDefaultRegistry returned error: %v", err)
+	}
+	if !registry.Supports(models.ProtocolWireGuard) {
+		t.Fatal("expected default registry to support WireGuard")
+	}
+	driver, ok := registry.Get(models.ProtocolWireGuard)
+	if !ok {
+		t.Fatal("expected default registry to return WireGuard driver")
+	}
+	capabilities := driver.Capabilities()
+	if capabilities.RuntimeStrategy != "host_kernel_netlink" {
+		t.Fatalf("runtime strategy = %q, want host_kernel_netlink", capabilities.RuntimeStrategy)
+	}
+	if !capabilities.ConfigDownload || !capabilities.QRCode {
+		t.Fatalf("expected WireGuard config download and QR support: %+v", capabilities)
+	}
+	if registry.Supports(models.ProtocolOpenVPN) {
+		t.Fatal("expected OpenVPN to stay unavailable in Phase 1")
 	}
 }

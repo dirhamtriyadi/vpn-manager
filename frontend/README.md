@@ -1,4 +1,4 @@
-# WireGuard Panel — Frontend (Vite + React + shadcn + RHF + Zod + Axios)
+# VPN Manager — Frontend (Vite + React + shadcn + RHF + Zod + Axios)
 
 Web UI for the WireGuard management API (`backend/`). Create interfaces, add
 peers, watch live handshake/transfer status, and hand clients a QR / `.conf` —

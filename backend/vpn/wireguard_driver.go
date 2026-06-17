@@ -12,6 +12,15 @@ func (d *WireGuardDriver) Protocol() models.VPNProtocol {
 	return models.ProtocolWireGuard
 }
 
+func (d *WireGuardDriver) Capabilities() ProtocolCapabilities {
+	return ProtocolCapabilities{
+		RuntimeStrategy:      "host_kernel_netlink",
+		ConfigDownload:       true,
+		QRCode:               true,
+		RequiresCertificates: false,
+	}
+}
+
 func (d *WireGuardDriver) Status(instanceID uint) (InstanceStatus, error) {
 	return InstanceStatus{Protocol: models.ProtocolWireGuard, Up: true}, nil
 }

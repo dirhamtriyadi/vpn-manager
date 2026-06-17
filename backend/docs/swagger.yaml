@@ -154,7 +154,7 @@ info:
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
-  title: WireGuard Panel API
+  title: VPN Manager API
   version: "1.0"
 paths:
   /interfaces:

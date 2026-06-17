@@ -3,10 +3,14 @@ package dto
 import "github.com/example/wg-panel/models"
 
 type VPNProtocolResponse struct {
-	ID             models.VPNProtocol `json:"id"`
-	Label          string             `json:"label"`
-	Available      bool               `json:"available"`
-	LegacyInsecure bool               `json:"legacy_insecure"`
+	ID                   models.VPNProtocol `json:"id"`
+	Label                string             `json:"label"`
+	Available            bool               `json:"available"`
+	LegacyInsecure       bool               `json:"legacy_insecure"`
+	RuntimeStrategy      string             `json:"runtime_strategy,omitempty"`
+	ConfigDownload       bool               `json:"config_download"`
+	QRCode               bool               `json:"qr_code"`
+	RequiresCertificates bool               `json:"requires_certificates"`
 }
 
 type VPNInstanceResponse struct {

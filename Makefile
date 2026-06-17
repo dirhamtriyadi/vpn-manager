@@ -9,7 +9,7 @@ FRONTEND_PORT ?= 5173
 .PHONY: help env install setup dev dev-db backend frontend db-up db-down docker-up docker-down docker-logs backend-run backend-test backend-build backend-tidy backend-swag frontend-dev frontend-install frontend-lint frontend-build frontend-preview lint test build clean status
 
 help: ## Tampilkan daftar command
-	@awk 'BEGIN {FS = ":.*##"; printf "\nWireGuard Panel Makefile\n\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nVPN Manager Makefile\n\nUsage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@printf "\nContoh:\n  make dev              # jalankan backend + frontend sekaligus\n  make backend          # jalankan backend saja\n  make frontend         # jalankan frontend saja\n  make docker-up        # jalankan full-stack (DB + API + frontend) via Docker\n\n"
 
 env: ## Buat file .env dari .env.example jika belum ada

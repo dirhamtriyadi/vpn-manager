@@ -7,6 +7,10 @@ export interface VPNProtocolInfo {
   label: string
   available: boolean
   legacy_insecure: boolean
+  runtime_strategy?: string
+  config_download: boolean
+  qr_code: boolean
+  requires_certificates: boolean
 }
 
 export interface WireGuardInstanceMeta {

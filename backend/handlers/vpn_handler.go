@@ -12,21 +12,45 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type VPNHandler struct{}
+type VPNHandler struct {
+	registry *vpnsvc.Registry
+}
 
 func NewVPNHandler() *VPNHandler {
-	return &VPNHandler{}
+	registry, err := vpnsvc.NewDefaultRegistry()
+	if err != nil {
+		registry = vpnsvc.NewRegistry()
+	}
+	return &VPNHandler{registry: registry}
 }
 
 func (h *VPNHandler) Protocols(c *gin.Context) {
 	protocols := []dto.VPNProtocolResponse{
-		{ID: models.ProtocolWireGuard, Label: "WireGuard", Available: true, LegacyInsecure: models.ProtocolWireGuard.IsLegacyInsecure()},
-		{ID: models.ProtocolOpenVPN, Label: "OpenVPN", Available: false, LegacyInsecure: models.ProtocolOpenVPN.IsLegacyInsecure()},
-		{ID: models.ProtocolL2TPIPsec, Label: "L2TP/IPsec", Available: false, LegacyInsecure: models.ProtocolL2TPIPsec.IsLegacyInsecure()},
-		{ID: models.ProtocolSSTP, Label: "SSTP", Available: false, LegacyInsecure: models.ProtocolSSTP.IsLegacyInsecure()},
-		{ID: models.ProtocolPPTP, Label: "PPTP", Available: false, LegacyInsecure: models.ProtocolPPTP.IsLegacyInsecure()},
+		h.protocolResponse(models.ProtocolWireGuard, "WireGuard"),
+		h.protocolResponse(models.ProtocolOpenVPN, "OpenVPN"),
+		h.protocolResponse(models.ProtocolL2TPIPsec, "L2TP/IPsec"),
+		h.protocolResponse(models.ProtocolSSTP, "SSTP"),
+		h.protocolResponse(models.ProtocolPPTP, "PPTP"),
 	}
 	dto.OK(c, "data fetched successfully", protocols)
+}
+
+func (h *VPNHandler) protocolResponse(protocol models.VPNProtocol, label string) dto.VPNProtocolResponse {
+	response := dto.VPNProtocolResponse{
+		ID:             protocol,
+		Label:          label,
+		Available:      false,
+		LegacyInsecure: protocol.IsLegacyInsecure(),
+	}
+	if driver, ok := h.registry.Get(protocol); ok {
+		capabilities := driver.Capabilities()
+		response.Available = true
+		response.RuntimeStrategy = capabilities.RuntimeStrategy
+		response.ConfigDownload = capabilities.ConfigDownload
+		response.QRCode = capabilities.QRCode
+		response.RequiresCertificates = capabilities.RequiresCertificates
+	}
+	return response
 }
 
 func (h *VPNHandler) Instances(c *gin.Context) {

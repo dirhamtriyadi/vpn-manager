@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// @title           WireGuard Panel API
+// @title           VPN Manager API
 // @version         1.0
 // @description     Manage a WireGuard VPN concentrator (interfaces & peers) without touching the CLI.
 // @description     Keys, client configs and QR codes are generated server-side; peers are pushed to the kernel via netlink.
