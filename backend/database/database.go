@@ -31,7 +31,14 @@ func Connect(cfg *config.Config) {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 
-	if err := db.AutoMigrate(&models.WGInterface{}, &models.Peer{}); err != nil {
+	if err := db.AutoMigrate(
+		&models.WGInterface{},
+		&models.Peer{},
+		&models.OpenVPNInstance{},
+		&models.OpenVPNUser{},
+		&models.OpenVPNRuntimeManifest{},
+		&models.EncryptedSecret{},
+	); err != nil {
 		log.Fatalf("failed to run auto migration: %v", err)
 	}
 

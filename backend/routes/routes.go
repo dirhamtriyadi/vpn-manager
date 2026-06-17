@@ -50,6 +50,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	ifaceHandler := handlers.NewInterfaceHandler(cfg)
 	peerHandler := handlers.NewPeerHandler()
 	vpnHandler := handlers.NewVPNHandler()
+	openVPNHandler := handlers.NewOpenVPNHandler()
 
 	api := r.Group("/api/v1")
 	{
@@ -96,6 +97,17 @@ func Setup(cfg *config.Config) *gin.Engine {
 			vpn.GET("/instances/:id", vpnHandler.Instance)
 			vpn.GET("/instances/:id/users", vpnHandler.Users)
 			vpn.GET("/instances/:id/status", vpnHandler.Status)
+
+			openvpn := vpn.Group("/openvpn")
+			{
+				openvpn.GET("/roadmap", openVPNHandler.Roadmap)
+				openvpn.GET("/instances", openVPNHandler.ListInstances)
+				openvpn.POST("/instances", openVPNHandler.CreateInstanceDraft)
+				openvpn.GET("/instances/:id/runtime-manifest", openVPNHandler.GetRuntimeManifest)
+				openvpn.POST("/instances/:id/runtime-manifest", openVPNHandler.GenerateRuntimeManifest)
+				openvpn.POST("/runtime/preview", openVPNHandler.PreviewRuntimeManifest)
+				openvpn.POST("/client-profile/preview", openVPNHandler.PreviewClientProfile)
+			}
 		}
 	}
 

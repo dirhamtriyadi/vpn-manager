@@ -63,4 +63,53 @@ export interface VPNInstanceStatus {
   kernel_message?: string
 }
 
+export interface OpenVPNRoadmap {
+  available: boolean
+  status: string
+  runtime_mode: string
+  secret_storage_status: string
+  manifest_status: string
+  next_steps: string[]
+  blocked_message: string
+}
+
+export interface OpenVPNRuntimeManifestPreviewRequest {
+  instance_name: string
+  remote_host: string
+  listen_port?: number
+  protocol?: "udp" | "tcp" | string
+  tunnel_cidr: string
+  dns?: string
+}
+
+export interface OpenVPNRuntimeManifest {
+  runtime_mode: string
+  files: Record<string, string>
+  warnings: string[]
+}
+
+export interface OpenVPNPersistedRuntimeManifest {
+  id: number
+  instance_id: number
+  runtime_mode: string
+  server_conf: string
+  compose_yaml: string
+  warnings: string[]
+  generation_status: string
+}
+
+export interface OpenVPNInstanceDraft {
+  id: number
+  name: string
+  remote_host: string
+  listen_port: number
+  protocol: string
+  tunnel_cidr: string
+  dns: string
+  enabled: boolean
+  runtime_mode: string
+  secret_storage_status: string
+  secret_refs: Record<string, string>
+}
+
 export type { ListParams, PaginatedResult, PaginationMeta }

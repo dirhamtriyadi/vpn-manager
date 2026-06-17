@@ -34,7 +34,7 @@ const fallbackProtocols: VPNProtocolInfo[] = [
     description: "Needs OpenVPN runtime, certificate authority, server config, and .ovpn generation.",
     available: false,
     legacy_insecure: false,
-    runtime_strategy: "container_or_host_openvpn",
+    runtime_strategy: "container_openvpn_preview",
     config_download: true,
     qr_code: false,
     requires_certificates: true,
@@ -163,6 +163,10 @@ export function ProtocolSelector() {
                     <Plus />
                     Create WireGuard instance
                   </Link>
+                </Button>
+              ) : protocol.id === "openvpn" ? (
+                <Button variant="outline" asChild>
+                  <Link to="/vpn/openvpn">View OpenVPN requirements</Link>
                 </Button>
               ) : (
                 <Button disabled variant="outline">

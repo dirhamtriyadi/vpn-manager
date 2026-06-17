@@ -39,7 +39,7 @@ func AllProtocolSpecs() []ProtocolSpec {
 			Description:    "Roadmap protocol; needs OpenVPN runtime, certificate authority, server config, and .ovpn generation.",
 			LegacyInsecure: false,
 			Capabilities: ProtocolCapabilities{
-				RuntimeStrategy:      "container_or_host_openvpn",
+				RuntimeStrategy:      "container_openvpn_preview",
 				ConfigDownload:       true,
 				QRCode:               false,
 				RequiresCertificates: true,

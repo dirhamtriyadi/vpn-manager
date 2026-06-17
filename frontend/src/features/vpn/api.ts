@@ -4,6 +4,11 @@ import type {
   ListParams,
   PaginatedResult,
   PaginationMeta,
+  OpenVPNInstanceDraft,
+  OpenVPNPersistedRuntimeManifest,
+  OpenVPNRoadmap,
+  OpenVPNRuntimeManifest,
+  OpenVPNRuntimeManifestPreviewRequest,
   VPNInstance,
   VPNInstanceStatus,
   VPNProtocolInfo,
@@ -19,6 +24,33 @@ function paginated<T>(response: ApiResponse<T[]>): PaginatedResult<T> {
 export async function listVPNProtocols(): Promise<VPNProtocolInfo[]> {
   const { data } = await api.get<ApiResponse<VPNProtocolInfo[]>>("/vpn/protocols")
   return data.data ?? []
+}
+
+export async function getOpenVPNRoadmap(): Promise<OpenVPNRoadmap> {
+  const { data } = await api.get<ApiResponse<OpenVPNRoadmap>>("/vpn/openvpn/roadmap")
+  return data.data
+}
+
+export async function listOpenVPNInstanceDrafts(params: ListParams = {}): Promise<PaginatedResult<OpenVPNInstanceDraft>> {
+  const { data } = await api.get<ApiResponse<OpenVPNInstanceDraft[]>>("/vpn/openvpn/instances", { params })
+  return paginated(data)
+}
+
+export async function getOpenVPNRuntimeManifest(instanceId: number): Promise<OpenVPNPersistedRuntimeManifest> {
+  const { data } = await api.get<ApiResponse<OpenVPNPersistedRuntimeManifest>>(`/vpn/openvpn/instances/${instanceId}/runtime-manifest`)
+  return data.data
+}
+
+export async function generateOpenVPNRuntimeManifest(instanceId: number): Promise<OpenVPNPersistedRuntimeManifest> {
+  const { data } = await api.post<ApiResponse<OpenVPNPersistedRuntimeManifest>>(`/vpn/openvpn/instances/${instanceId}/runtime-manifest`)
+  return data.data
+}
+
+export async function previewOpenVPNRuntimeManifest(
+  payload: OpenVPNRuntimeManifestPreviewRequest,
+): Promise<OpenVPNRuntimeManifest> {
+  const { data } = await api.post<ApiResponse<OpenVPNRuntimeManifest>>("/vpn/openvpn/runtime/preview", payload)
+  return data.data
 }
 
 export async function listVPNInstances(params: ListParams = {}): Promise<PaginatedResult<VPNInstance>> {
