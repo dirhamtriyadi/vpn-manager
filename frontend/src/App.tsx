@@ -1,8 +1,9 @@
 import { Link, NavLink, Route, Routes } from "react-router-dom"
-import { Archive, LayoutDashboard, LogOut } from "lucide-react"
+import { Archive, LayoutDashboard, LogOut, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dashboard } from "@/features/wireguard/Dashboard"
 import { TrashPage } from "@/features/wireguard/TrashPage"
+import { ProtocolSelector } from "@/features/vpn/ProtocolSelector"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { useAuth } from "@/features/auth/AuthContext"
 
@@ -18,9 +19,9 @@ function App() {
       <header className="border-b bg-background">
         <div className="container flex min-h-16 flex-wrap items-center justify-between gap-3 py-3">
           <Link to="/" className="flex items-baseline gap-3">
-            <h1 className="text-lg font-semibold">WireGuard Panel</h1>
+            <h1 className="text-lg font-semibold">VPN Manager</h1>
             <span className="hidden text-sm text-muted-foreground sm:inline">
-              Manage your VPN concentrator — no CLI
+              Manage WireGuard now, with multi-protocol support staged
             </span>
           </Link>
           <nav className="flex items-center gap-2">
@@ -28,6 +29,12 @@ function App() {
               <NavLink to="/" end>
                 <LayoutDashboard />
                 Dashboard
+              </NavLink>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <NavLink to="/vpn/new">
+                <Plus />
+                New VPN
               </NavLink>
             </Button>
             <Button variant="outline" size="sm" asChild>
@@ -52,6 +59,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/trash" element={<TrashPage />} />
+          <Route path="/vpn/new" element={<ProtocolSelector />} />
         </Routes>
       </main>
     </div>

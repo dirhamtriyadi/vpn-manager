@@ -49,6 +49,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	authHandler := handlers.NewAuthHandler(authSvc)
 	ifaceHandler := handlers.NewInterfaceHandler(cfg)
 	peerHandler := handlers.NewPeerHandler()
+	vpnHandler := handlers.NewVPNHandler()
 
 	api := r.Group("/api/v1")
 	{
@@ -86,6 +87,15 @@ func Setup(cfg *config.Config) *gin.Engine {
 			peers.DELETE("/:peerId/purge", peerHandler.Purge)
 			peers.GET("/:peerId/config", peerHandler.Config)
 			peers.GET("/:peerId/qrcode", peerHandler.QRCode)
+		}
+
+		vpn := protected.Group("/vpn")
+		{
+			vpn.GET("/protocols", vpnHandler.Protocols)
+			vpn.GET("/instances", vpnHandler.Instances)
+			vpn.GET("/instances/:id", vpnHandler.Instance)
+			vpn.GET("/instances/:id/users", vpnHandler.Users)
+			vpn.GET("/instances/:id/status", vpnHandler.Status)
 		}
 	}
 

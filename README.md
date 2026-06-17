@@ -1,9 +1,11 @@
-# WireGuard Panel
+# VPN Manager
 
-Monorepo aplikasi panel web untuk mengelola WireGuard server dan peer dari browser. Backend membuat interface WireGuard, generate key, generate config/QR client, membaca status handshake, dan menerapkan perubahan langsung ke kernel Linux via netlink. Frontend menyediakan dashboard React untuk membuat interface, menambah peer, melihat status, copy/download config, script MikroTik RouterOS, serta Trash/Restore.
+Monorepo aplikasi panel web untuk mengelola VPN server dan user dari browser. Saat ini runtime yang aktif adalah WireGuard; fondasi multi-protocol sudah disiapkan untuk OpenVPN, L2TP/IPsec, SSTP, dan PPTP legacy/insecure. Backend membuat interface WireGuard, generate key, generate config/QR client, membaca status handshake, dan menerapkan perubahan langsung ke kernel Linux via netlink. Frontend menyediakan dashboard React untuk membuat instance WireGuard, menambah peer, melihat status, copy/download config, script MikroTik RouterOS, serta Trash/Restore.
 
 ## Fitur
 
+- Fondasi VPN Manager multi-protocol dengan daftar protocol: WireGuard, OpenVPN, L2TP/IPsec, SSTP, dan PPTP legacy/insecure.
+- Endpoint generic awal `/api/v1/vpn/*` untuk protocol, instance, user, dan status.
 - Buat WireGuard interface/server dari UI.
 - Generate keypair server/client otomatis.
 - Auto-assign IP tunnel peer.
@@ -34,6 +36,7 @@ wireguard/
 │   ├── middleware/
 │   ├── models/
 │   ├── routes/
+│   ├── vpn/              # Protocol abstraction + WireGuard adapter/mappers
 │   ├── wg/
 │   ├── Dockerfile
 │   ├── docker-compose.yml
@@ -46,6 +49,28 @@ wireguard/
 │   └── README.md
 └── README.md             # File ini
 ```
+
+## Roadmap multi-protocol
+
+Phase 1 menambahkan fondasi tanpa mematikan fitur WireGuard lama:
+
+- `wireguard`: available sekarang.
+- `openvpn`: roadmap, akan membutuhkan runtime OpenVPN dan generation `.ovpn`.
+- `l2tp_ipsec`: roadmap, kemungkinan memakai strongSwan + xl2tpd atau runtime container setara.
+- `sstp`: roadmap, cocok untuk client Windows dan membutuhkan TLS certificate/runtime SSTP.
+- `pptp`: roadmap legacy/insecure; hanya untuk kompatibilitas perangkat lama dan tidak direkomendasikan untuk deployment baru.
+
+Endpoint generic awal:
+
+```text
+GET /api/v1/vpn/protocols
+GET /api/v1/vpn/instances
+GET /api/v1/vpn/instances/:id
+GET /api/v1/vpn/instances/:id/users
+GET /api/v1/vpn/instances/:id/status
+```
+
+Endpoint WireGuard lama (`/interfaces` dan `/peers`) tetap dipertahankan agar fitur existing tidak breaking.
 
 ## Stack
 

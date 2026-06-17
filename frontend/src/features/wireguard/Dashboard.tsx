@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import {
   Plus,
   Pencil,
@@ -81,6 +81,7 @@ const PEER_SORT_OPTIONS = [
 ]
 
 export function Dashboard() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [interfaces, setInterfaces] = useState<WGInterface[]>([])
   const [interfacesMeta, setInterfacesMeta] = useState<PaginationMeta>(DEFAULT_META)
   const [peersMeta, setPeersMeta] = useState<PaginationMeta>(DEFAULT_META)
@@ -123,6 +124,12 @@ export function Dashboard() {
   useEffect(() => {
     loadInterfaces()
   }, [loadInterfaces])
+
+  useEffect(() => {
+    if (searchParams.get("create") !== "wireguard") return
+    setCreateOpen(true)
+    setSearchParams({}, { replace: true })
+  }, [searchParams, setSearchParams])
 
   // poll status every 5s for the selected interface
   useEffect(() => {
