@@ -25,32 +25,31 @@ func NewVPNHandler() *VPNHandler {
 }
 
 func (h *VPNHandler) Protocols(c *gin.Context) {
-	protocols := []dto.VPNProtocolResponse{
-		h.protocolResponse(models.ProtocolWireGuard, "WireGuard"),
-		h.protocolResponse(models.ProtocolOpenVPN, "OpenVPN"),
-		h.protocolResponse(models.ProtocolL2TPIPsec, "L2TP/IPsec"),
-		h.protocolResponse(models.ProtocolSSTP, "SSTP"),
-		h.protocolResponse(models.ProtocolPPTP, "PPTP"),
+	protocols := make([]dto.VPNProtocolResponse, 0, len(vpnsvc.AllProtocolSpecs()))
+	for _, spec := range vpnsvc.AllProtocolSpecs() {
+		protocols = append(protocols, h.protocolResponse(spec))
 	}
 	dto.OK(c, "data fetched successfully", protocols)
 }
 
-func (h *VPNHandler) protocolResponse(protocol models.VPNProtocol, label string) dto.VPNProtocolResponse {
-	response := dto.VPNProtocolResponse{
-		ID:             protocol,
-		Label:          label,
-		Available:      false,
-		LegacyInsecure: protocol.IsLegacyInsecure(),
+func (h *VPNHandler) protocolResponse(spec vpnsvc.ProtocolSpec) dto.VPNProtocolResponse {
+	capabilities := spec.Capabilities
+	available := h.registry.Supports(spec.Protocol)
+	if driver, ok := h.registry.Get(spec.Protocol); ok {
+		capabilities = driver.Capabilities()
 	}
-	if driver, ok := h.registry.Get(protocol); ok {
-		capabilities := driver.Capabilities()
-		response.Available = true
-		response.RuntimeStrategy = capabilities.RuntimeStrategy
-		response.ConfigDownload = capabilities.ConfigDownload
-		response.QRCode = capabilities.QRCode
-		response.RequiresCertificates = capabilities.RequiresCertificates
+	return dto.VPNProtocolResponse{
+		ID:                   spec.Protocol,
+		Label:                spec.Label,
+		Status:               spec.Status,
+		Description:          spec.Description,
+		Available:            available,
+		LegacyInsecure:       spec.LegacyInsecure,
+		RuntimeStrategy:      capabilities.RuntimeStrategy,
+		ConfigDownload:       capabilities.ConfigDownload,
+		QRCode:               capabilities.QRCode,
+		RequiresCertificates: capabilities.RequiresCertificates,
 	}
-	return response
 }
 
 func (h *VPNHandler) Instances(c *gin.Context) {

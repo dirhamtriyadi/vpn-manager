@@ -5,6 +5,8 @@ import "github.com/example/wg-panel/models"
 type VPNProtocolResponse struct {
 	ID                   models.VPNProtocol `json:"id"`
 	Label                string             `json:"label"`
+	Status               string             `json:"status"`
+	Description          string             `json:"description"`
 	Available            bool               `json:"available"`
 	LegacyInsecure       bool               `json:"legacy_insecure"`
 	RuntimeStrategy      string             `json:"runtime_strategy,omitempty"`

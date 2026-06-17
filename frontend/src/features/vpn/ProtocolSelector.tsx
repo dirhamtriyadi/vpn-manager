@@ -18,6 +18,8 @@ const fallbackProtocols: VPNProtocolInfo[] = [
   {
     id: "wireguard",
     label: "WireGuard",
+    status: "available",
+    description: "Fast kernel-backed VPN using the existing WireGuard interface and peer workflow.",
     available: true,
     legacy_insecure: false,
     runtime_strategy: "host_kernel_netlink",
@@ -28,17 +30,23 @@ const fallbackProtocols: VPNProtocolInfo[] = [
   {
     id: "openvpn",
     label: "OpenVPN",
+    status: "roadmap",
+    description: "Needs OpenVPN runtime, certificate authority, server config, and .ovpn generation.",
     available: false,
     legacy_insecure: false,
-    config_download: false,
+    runtime_strategy: "container_or_host_openvpn",
+    config_download: true,
     qr_code: false,
     requires_certificates: true,
   },
   {
     id: "l2tp_ipsec",
     label: "L2TP/IPsec",
+    status: "roadmap",
+    description: "Needs IPsec/IKE daemon, PPP users, PSK/certificate handling, and firewall/NAT rules.",
     available: false,
     legacy_insecure: false,
+    runtime_strategy: "host_ipsec_ppp",
     config_download: false,
     qr_code: false,
     requires_certificates: false,
@@ -46,8 +54,11 @@ const fallbackProtocols: VPNProtocolInfo[] = [
   {
     id: "sstp",
     label: "SSTP",
+    status: "roadmap",
+    description: "Needs SSTP daemon, TLS certificate management, users, and service status integration.",
     available: false,
     legacy_insecure: false,
+    runtime_strategy: "container_or_host_sstp",
     config_download: false,
     qr_code: false,
     requires_certificates: true,
@@ -55,8 +66,11 @@ const fallbackProtocols: VPNProtocolInfo[] = [
   {
     id: "pptp",
     label: "PPTP",
+    status: "legacy_roadmap",
+    description: "Legacy/insecure compatibility protocol; only consider for old clients that cannot use safer VPNs.",
     available: false,
     legacy_insecure: true,
+    runtime_strategy: "legacy_host_pptpd",
     config_download: false,
     qr_code: false,
     requires_certificates: false,
@@ -109,11 +123,7 @@ export function ProtocolSelector() {
                     <Shield className="h-5 w-5" />
                     {protocol.label}
                   </CardTitle>
-                  <CardDescription>
-                    {protocol.available
-                      ? "Available now through the existing WireGuard flow."
-                      : "Coming soon as a protocol driver."}
-                  </CardDescription>
+                  <CardDescription>{protocol.description}</CardDescription>
                 </div>
                 {protocol.available ? (
                   <Badge>
@@ -123,7 +133,7 @@ export function ProtocolSelector() {
                 ) : (
                   <Badge variant="secondary">
                     <Clock className="mr-1 h-3 w-3" />
-                    Roadmap
+                    {protocol.status === "legacy_roadmap" ? "Legacy roadmap" : "Roadmap"}
                   </Badge>
                 )}
               </div>

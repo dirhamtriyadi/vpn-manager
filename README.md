@@ -7,6 +7,7 @@ Monorepo aplikasi panel web untuk mengelola VPN server dan user dari browser. Sa
 - Fondasi VPN Manager multi-protocol dengan daftar protocol: WireGuard, OpenVPN, L2TP/IPsec, SSTP, dan PPTP legacy/insecure.
 - Endpoint generic awal `/api/v1/vpn/*` untuk protocol, instance, user, dan status.
 - Registry/capability scaffold untuk runtime protocol; saat ini hanya WireGuard yang `available` dengan runtime `host_kernel_netlink`.
+- Roadmap protocol terdokumentasi di `docs/vpn-protocol-roadmap.md`; protocol selain WireGuard tetap disabled sampai driver runtime benar-benar tersedia.
 - Buat WireGuard interface/server dari UI.
 - Generate keypair server/client otomatis.
 - Auto-assign IP tunnel peer.
