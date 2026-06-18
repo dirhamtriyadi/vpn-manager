@@ -1,0 +1,87 @@
+package vpn
+
+import (
+	"fmt"
+
+	"github.com/example/wg-panel/models"
+)
+
+type ProductionGates struct {
+	RuntimeExecution bool `json:"runtime_execution"`
+	FirewallApply    bool `json:"firewall_apply"`
+	HostVerification bool `json:"host_verification"`
+}
+
+type ProductionPlan struct {
+	Protocol         models.VPNProtocol `json:"protocol"`
+	Label            string             `json:"label"`
+	Ready            bool               `json:"ready"`
+	ExecutionMode    string             `json:"execution_mode"`
+	RuntimeCommands  []string           `json:"runtime_commands"`
+	FirewallCommands []string           `json:"firewall_commands"`
+	StatusCommands   []string           `json:"status_commands"`
+	ConfigFiles      []string           `json:"config_files"`
+	Blockers         []string           `json:"blockers"`
+	Warnings         []string           `json:"warnings"`
+	LegacyInsecure   bool               `json:"legacy_insecure"`
+}
+
+func BuildProductionPlan(protocol models.VPNProtocol, gates ProductionGates, executorEnabled bool) (ProductionPlan, error) {
+	spec, ok := GetProtocolSpec(protocol)
+	if !ok {
+		return ProductionPlan{}, fmt.Errorf("unsupported vpn protocol: %s", protocol)
+	}
+	blockers := protocolEnablementBlockers(gates.RuntimeExecution, gates.FirewallApply, gates.HostVerification)
+	plan := ProductionPlan{
+		Protocol:       spec.Protocol,
+		Label:          spec.Label,
+		Ready:          len(blockers) == 0,
+		ExecutionMode:  "manual",
+		Blockers:       blockers,
+		LegacyInsecure: spec.LegacyInsecure,
+		Warnings: []string{
+			"Review generated config paths, ports, subnets, and firewall ownership on the deployment host before execution.",
+			"The app should run with the least host privileges needed for the selected protocol.",
+		},
+	}
+	if !plan.Ready {
+		plan.ExecutionMode = "blocked"
+	}
+	if plan.Ready && executorEnabled {
+		plan.ExecutionMode = "executor_enabled"
+	}
+
+	switch protocol {
+	case models.ProtocolOpenVPN:
+		plan.ConfigFiles = []string{"/var/lib/wg-panel/openvpn/{instance_id}/server.conf", "/var/lib/wg-panel/openvpn/{instance_id}/docker-compose.yml", "/var/lib/wg-panel/openvpn/{instance_id}/pki/*"}
+		plan.RuntimeCommands = []string{"install -d -m 0700 /var/lib/wg-panel/openvpn/{instance_id}", "docker compose -p vpn-manager-openvpn-{name} -f /var/lib/wg-panel/openvpn/{instance_id}/docker-compose.yml up -d"}
+		plan.FirewallCommands = []string{"iptables -A INPUT -p udp --dport {listen_port} -m comment --comment 'wg-panel openvpn {name}' -j ACCEPT", "iptables -A FORWARD -s {tunnel_cidr} -m comment --comment 'wg-panel openvpn {name}' -j ACCEPT", "iptables -t nat -A POSTROUTING -s {tunnel_cidr} -m comment --comment 'wg-panel openvpn {name}' -j MASQUERADE"}
+		plan.StatusCommands = []string{"docker compose -p vpn-manager-openvpn-{name} -f /var/lib/wg-panel/openvpn/{instance_id}/docker-compose.yml ps", "docker compose -p vpn-manager-openvpn-{name} -f /var/lib/wg-panel/openvpn/{instance_id}/docker-compose.yml logs --tail=100 openvpn"}
+	case models.ProtocolL2TPIPsec:
+		plan.ConfigFiles = []string{"/etc/ipsec.conf", "/etc/ipsec.secrets", "/etc/xl2tpd/xl2tpd.conf", "/etc/ppp/options.xl2tpd", "/etc/ppp/chap-secrets"}
+		plan.RuntimeCommands = []string{"systemctl enable --now ipsec || systemctl enable --now strongswan", "systemctl enable --now xl2tpd", "systemctl restart ipsec || systemctl restart strongswan", "systemctl restart xl2tpd"}
+		plan.FirewallCommands = []string{"iptables -A INPUT -p udp -m multiport --dports 500,4500 -m comment --comment 'wg-panel l2tp-ipsec {name}' -j ACCEPT", "iptables -A INPUT -p udp --dport 1701 -m policy --dir in --pol ipsec -m comment --comment 'wg-panel l2tp-ipsec {name}' -j ACCEPT", "iptables -t nat -A POSTROUTING -s {pool_cidr} -m comment --comment 'wg-panel l2tp-ipsec {name}' -j MASQUERADE"}
+		plan.StatusCommands = []string{"ipsec statusall || strongswan statusall", "systemctl status xl2tpd --no-pager"}
+	case models.ProtocolSSTP:
+		plan.ConfigFiles = []string{"/etc/sstpd/sstpd.conf", "/etc/ppp/options.sstpd", "/etc/ppp/chap-secrets", "/var/lib/wg-panel/sstp/{instance_id}/tls.crt", "/var/lib/wg-panel/sstp/{instance_id}/tls.key"}
+		plan.RuntimeCommands = []string{"install -d -m 0700 /var/lib/wg-panel/sstp/{instance_id}", "systemctl enable --now sstpd", "systemctl restart sstpd"}
+		plan.FirewallCommands = []string{"iptables -A INPUT -p tcp --dport {listen_port} -m comment --comment 'wg-panel sstp {name}' -j ACCEPT", "iptables -A FORWARD -s {pool_cidr} -m comment --comment 'wg-panel sstp {name}' -j ACCEPT", "iptables -t nat -A POSTROUTING -s {pool_cidr} -m comment --comment 'wg-panel sstp {name}' -j MASQUERADE"}
+		plan.StatusCommands = []string{"systemctl status sstpd --no-pager", "journalctl -u sstpd -n 100 --no-pager"}
+	case models.ProtocolPPTP:
+		plan.ConfigFiles = []string{"/etc/pptpd.conf", "/etc/ppp/options.pptpd", "/etc/ppp/chap-secrets"}
+		plan.RuntimeCommands = []string{"systemctl enable --now pptpd", "systemctl restart pptpd", "modprobe nf_conntrack_pptp || true"}
+		plan.FirewallCommands = []string{"iptables -A INPUT -p tcp --dport 1723 -m comment --comment 'wg-panel pptp {name}' -j ACCEPT", "iptables -A INPUT -p 47 -m comment --comment 'wg-panel pptp {name} GRE' -j ACCEPT", "iptables -t nat -A POSTROUTING -s {pool_cidr} -m comment --comment 'wg-panel pptp {name}' -j MASQUERADE"}
+		plan.StatusCommands = []string{"systemctl status pptpd --no-pager", "journalctl -u pptpd -n 100 --no-pager"}
+		plan.Warnings = append(plan.Warnings, "PPTP is legacy/insecure; keep it disabled unless old clients have no safer alternative.")
+	case models.ProtocolWireGuard:
+		plan.Ready = true
+		plan.ExecutionMode = "existing_driver"
+		plan.ConfigFiles = []string{"existing database-backed WireGuard interface/peer configuration"}
+		plan.RuntimeCommands = []string{"use existing WireGuard create/sync endpoints"}
+		plan.FirewallCommands = []string{"use existing interface masquerade/firewall behavior"}
+		plan.StatusCommands = []string{"use wgctrl status endpoint"}
+	default:
+		return ProductionPlan{}, fmt.Errorf("unsupported vpn protocol: %s", protocol)
+	}
+	return plan, nil
+}

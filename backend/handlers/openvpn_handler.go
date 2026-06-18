@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/example/wg-panel/middleware"
 	"github.com/example/wg-panel/models"
 	"github.com/example/wg-panel/openvpn"
+	"github.com/example/wg-panel/runtimeexec"
 	"github.com/example/wg-panel/secrets"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -337,6 +339,46 @@ func (h *OpenVPNHandler) FirewallPlan(c *gin.Context) {
 	dto.OK(c, "OpenVPN firewall plan generated; rules were not applied", openVPNFirewallResponse(plan))
 }
 
+func (h *OpenVPNHandler) ApplyRuntime(c *gin.Context) {
+	instance, ok := findOpenVPNInstanceByParam(c)
+	if !ok {
+		return
+	}
+	var manifest models.OpenVPNRuntimeManifest
+	if err := database.DB.Where("instance_id = ?", instance.ID).First(&manifest).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			dto.Error(c, http.StatusConflict, "generate OpenVPN runtime manifest before applying runtime")
+			return
+		}
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch OpenVPN runtime manifest")
+		return
+	}
+	lifecycle, err := openvpn.BuildLifecyclePlan(instance, "start")
+	if err != nil {
+		dto.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	firewall, err := openvpn.BuildFirewallPlan(instance)
+	if err != nil {
+		dto.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	commands := append([]string{}, firewall.Rules...)
+	commands = append(commands, lifecycle.Commands...)
+	result, err := runtimeexec.Apply(c.Request.Context(), runtimeexec.Options{RootDir: runtimeRootDir(), Gates: runtimeGates(), ExecutorEnabled: envFlag("VPN_COMMAND_EXECUTOR_ENABLED")}, runtimeexec.ApplyPlan{Files: map[string]string{
+		fmt.Sprintf("openvpn/%d/server.conf", instance.ID):         manifest.ServerConf,
+		fmt.Sprintf("openvpn/%d/docker-compose.yml", instance.ID): manifest.ComposeYAML,
+	}, Commands: commands})
+	if err != nil {
+		dto.Error(c, http.StatusPreconditionFailed, err.Error())
+		return
+	}
+	instance.Enabled = true
+	instance.RuntimeMode = "container_openvpn_active"
+	_ = database.DB.Save(&instance).Error
+	dto.OK(c, "OpenVPN runtime applied", result)
+}
+
 func (h *OpenVPNHandler) ParseStatus(c *gin.Context) {
 	var req dto.OpenVPNStatusPreviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -416,6 +458,18 @@ func (h *OpenVPNHandler) PreviewRuntimeManifest(c *gin.Context) {
 func envFlag(key string) bool {
 	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
 	return value == "1" || value == "true" || value == "yes" || value == "on"
+}
+
+func runtimeRootDir() string {
+	root := strings.TrimSpace(os.Getenv("VPN_RUNTIME_ROOT"))
+	if root == "" {
+		return "/var/lib/wg-panel"
+	}
+	return root
+}
+
+func runtimeGates() runtimeexec.Gates {
+	return runtimeexec.Gates{RuntimeExecution: envFlag("VPN_RUNTIME_EXECUTION_ENABLED"), FirewallApply: envFlag("VPN_FIREWALL_APPLY_ENABLED"), HostVerification: envFlag("VPN_HOST_VERIFICATION_PASSED")}
 }
 
 func gateStatus(enabled bool) string {

@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { apiErrorMessage } from "@/lib/api"
-import { getProtocolRoadmap, getProtocolServicePlan } from "./api"
-import type { ProtocolRoadmap, ProtocolServicePlan, VPNProtocol } from "./types"
+import { getProtocolProductionPlan, getProtocolRoadmap, getProtocolServicePlan } from "./api"
+import type { ProtocolProductionPlan, ProtocolRoadmap, ProtocolServicePlan, VPNProtocol } from "./types"
 
 const protocolLabels: Record<VPNProtocol, string> = {
   wireguard: "WireGuard",
@@ -50,15 +50,18 @@ export function ProtocolRoadmapPage() {
   const protocol = isVPNProtocol(protocolParam) ? protocolParam : "l2tp_ipsec"
   const [roadmap, setRoadmap] = useState<ProtocolRoadmap>(() => fallbackRoadmap(protocol))
   const [plan, setPlan] = useState<ProtocolServicePlan | null>(null)
+  const [productionPlan, setProductionPlan] = useState<ProtocolProductionPlan | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setRoadmap(fallbackRoadmap(protocol))
     setPlan(null)
-    Promise.all([getProtocolRoadmap(protocol), getProtocolServicePlan(protocol)])
-      .then(([nextRoadmap, nextPlan]) => {
+    setProductionPlan(null)
+    Promise.all([getProtocolRoadmap(protocol), getProtocolServicePlan(protocol), getProtocolProductionPlan(protocol)])
+      .then(([nextRoadmap, nextPlan, nextProductionPlan]) => {
         setRoadmap(nextRoadmap)
         setPlan(nextPlan)
+        setProductionPlan(nextProductionPlan)
         setError(null)
       })
       .catch((e) => {
@@ -139,6 +142,49 @@ export function ProtocolRoadmapPage() {
                 {roadmap.enablement_blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
               </ul>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Production execution plan</CardTitle>
+          <CardDescription>
+            Command checklist untuk production. Mode tetap blocked/manual kecuali semua gate host sudah diaktifkan.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {productionPlan ? (
+            <>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-md border bg-muted/50 p-3 text-sm">Ready: <span className="font-mono">{productionPlan.ready ? "yes" : "no"}</span></div>
+                <div className="rounded-md border bg-muted/50 p-3 text-sm">Mode: <span className="font-mono">{productionPlan.execution_mode}</span></div>
+                <div className="rounded-md border bg-muted/50 p-3 text-sm">Legacy insecure: <span className="font-mono">{productionPlan.legacy_insecure ? "yes" : "no"}</span></div>
+              </div>
+              {productionPlan.blockers.length > 0 && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                  <div className="mb-2 font-medium">Production blockers</div>
+                  <ul className="list-disc space-y-1 pl-6">
+                    {productionPlan.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+                  </ul>
+                </div>
+              )}
+              {[
+                ["Config files", productionPlan.config_files],
+                ["Runtime commands", productionPlan.runtime_commands],
+                ["Firewall commands", productionPlan.firewall_commands],
+                ["Status commands", productionPlan.status_commands],
+              ].map(([title, items]) => (
+                <div key={title as string}>
+                  <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+                  <ul className="list-disc space-y-1 pl-6 text-sm text-muted-foreground">
+                    {(items as string[]).map((item) => <li key={item} className="font-mono text-xs">{item}</li>)}
+                  </ul>
+                </div>
+              ))}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Loading production plan...</p>
           )}
         </CardContent>
       </Card>

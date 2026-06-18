@@ -26,6 +26,11 @@ Semua protocol sekarang punya endpoint generic untuk roadmap dan dry-run service
 
 - `GET /api/v1/vpn/roadmaps/{protocol}` untuk readiness, enablement blockers, dan component list.
 - `GET /api/v1/vpn/service-plans/{protocol}` untuk dry-run runtime/firewall/user plan.
+- `GET /api/v1/vpn/production-plans/{protocol}` untuk production command checklist, config-file targets, firewall commands, status commands, dan blocker gate.
+- `POST /api/v1/vpn/openvpn/instances/{id}/apply` untuk menulis manifest OpenVPN dan menjalankan firewall/docker compose saat semua gate aktif.
+- `POST /api/v1/vpn/{protocol}/instances/{id}/apply` untuk L2TP/IPsec, SSTP, atau PPTP; endpoint ini menulis file `/etc/*` dan menjalankan service/firewall command hanya saat semua gate aktif.
+- `POST /api/v1/vpn/config-preview` untuk preview file konfigurasi L2TP/IPsec, SSTP, atau PPTP tanpa menulis ke host.
+- `GET/POST /api/v1/vpn/{protocol}/instances` untuk draft instance L2TP/IPsec, SSTP, atau PPTP; default `enabled=false` dan runtime tetap disabled.
 
 Protocol values: `wireguard`, `openvpn`, `l2tp_ipsec`, `sstp`, `pptp`.
 
@@ -37,7 +42,7 @@ Global enablement gates untuk protocol non-WireGuard:
 - `VPN_FIREWALL_APPLY_ENABLED=true`
 - `VPN_HOST_VERIFICATION_PASSED=true`
 
-Gate ini hanya readiness signal; protocol tetap baru boleh `available=true` setelah ada driver runtime nyata yang didaftarkan di registry.
+Gate ini hanya readiness signal; protocol tetap baru boleh `available=true` setelah ada driver runtime nyata yang didaftarkan di registry. Production-plan endpoint sudah menampilkan command/config checklist untuk tiap protocol dan mode `blocked`/`manual`/`executor_enabled`, tetapi tidak menjalankan command dari UI.
 
 ## Next implementation candidate
 

@@ -37,6 +37,8 @@ func Connect(cfg *config.Config) {
 		&models.OpenVPNInstance{},
 		&models.OpenVPNUser{},
 		&models.OpenVPNRuntimeManifest{},
+		&models.LegacyVPNInstance{},
+		&models.LegacyVPNUser{},
 		&models.EncryptedSecret{},
 	); err != nil {
 		log.Fatalf("failed to run auto migration: %v", err)

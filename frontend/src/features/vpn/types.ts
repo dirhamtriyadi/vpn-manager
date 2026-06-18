@@ -94,6 +94,20 @@ export interface ProtocolServicePlan {
   legacy_insecure: boolean
 }
 
+export interface ProtocolProductionPlan {
+  protocol: VPNProtocol
+  label: string
+  ready: boolean
+  execution_mode: string
+  runtime_commands: string[]
+  firewall_commands: string[]
+  status_commands: string[]
+  config_files: string[]
+  blockers: string[]
+  warnings: string[]
+  legacy_insecure: boolean
+}
+
 export interface OpenVPNRoadmap {
   available: boolean
   status: string

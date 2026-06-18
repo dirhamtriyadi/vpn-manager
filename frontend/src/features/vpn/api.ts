@@ -13,6 +13,7 @@ import type {
   OpenVPNRuntimeManifestPreviewRequest,
   ProtocolRoadmap,
   ProtocolServicePlan,
+  ProtocolProductionPlan,
   VPNInstance,
   VPNInstanceStatus,
   VPNProtocolInfo,
@@ -38,6 +39,11 @@ export async function getProtocolRoadmap(protocol: VPNProtocol): Promise<Protoco
 
 export async function getProtocolServicePlan(protocol: VPNProtocol): Promise<ProtocolServicePlan> {
   const { data } = await api.get<ApiResponse<ProtocolServicePlan>>(`/vpn/service-plans/${protocol}`)
+  return data.data
+}
+
+export async function getProtocolProductionPlan(protocol: VPNProtocol): Promise<ProtocolProductionPlan> {
+  const { data } = await api.get<ApiResponse<ProtocolProductionPlan>>(`/vpn/production-plans/${protocol}`)
   return data.data
 }
 
