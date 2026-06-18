@@ -93,6 +93,8 @@ func Setup(cfg *config.Config) *gin.Engine {
 		vpn := protected.Group("/vpn")
 		{
 			vpn.GET("/protocols", vpnHandler.Protocols)
+			vpn.GET("/roadmaps/:protocol", vpnHandler.ProtocolRoadmap)
+			vpn.GET("/service-plans/:protocol", vpnHandler.ProtocolServicePlan)
 			vpn.GET("/instances", vpnHandler.Instances)
 			vpn.GET("/instances/:id", vpnHandler.Instance)
 			vpn.GET("/instances/:id/users", vpnHandler.Users)
@@ -105,6 +107,11 @@ func Setup(cfg *config.Config) *gin.Engine {
 				openvpn.POST("/instances", openVPNHandler.CreateInstanceDraft)
 				openvpn.GET("/instances/:id/runtime-manifest", openVPNHandler.GetRuntimeManifest)
 				openvpn.POST("/instances/:id/runtime-manifest", openVPNHandler.GenerateRuntimeManifest)
+				openvpn.GET("/instances/:id/users", openVPNHandler.ListUsers)
+				openvpn.POST("/instances/:id/users", openVPNHandler.CreateUserDraft)
+				openvpn.POST("/instances/:id/lifecycle/:action", openVPNHandler.LifecyclePlan)
+				openvpn.POST("/instances/:id/firewall-plan", openVPNHandler.FirewallPlan)
+				openvpn.POST("/status/parse", openVPNHandler.ParseStatus)
 				openvpn.POST("/runtime/preview", openVPNHandler.PreviewRuntimeManifest)
 				openvpn.POST("/client-profile/preview", openVPNHandler.PreviewClientProfile)
 			}

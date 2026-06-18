@@ -5,6 +5,7 @@ import { Dashboard } from "@/features/wireguard/Dashboard"
 import { TrashPage } from "@/features/wireguard/TrashPage"
 import { ProtocolSelector } from "@/features/vpn/ProtocolSelector"
 import { OpenVPNRoadmapPage } from "@/features/vpn/OpenVPNRoadmapPage"
+import { ProtocolRoadmapPage } from "@/features/vpn/ProtocolRoadmapPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { useAuth } from "@/features/auth/AuthContext"
 
@@ -62,6 +63,7 @@ function App() {
           <Route path="/trash" element={<TrashPage />} />
           <Route path="/vpn/new" element={<ProtocolSelector />} />
           <Route path="/vpn/openvpn" element={<OpenVPNRoadmapPage />} />
+          <Route path="/vpn/:protocol" element={<ProtocolRoadmapPage />} />
         </Routes>
       </main>
     </div>

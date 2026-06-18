@@ -1,6 +1,6 @@
 # VPN Protocol Roadmap
 
-Status implementasi multi-protocol saat ini bersifat bertahap. WireGuard tetap menjadi runtime aktif; protocol lain belum diaktifkan sampai runtime/service strategy dipilih dan diuji.
+Status implementasi multi-protocol saat ini bersifat bertahap. WireGuard tetap menjadi runtime aktif; protocol lain sekarang punya service-plan scaffold dan readiness/enablement gate, tetapi belum diaktifkan sampai driver runtime/service diuji di host.
 
 ## Status protocol
 
@@ -20,6 +20,25 @@ Status implementasi multi-protocol saat ini bersifat bertahap. WireGuard tetap m
 4. OpenVPN/L2TP/SSTP/PPTP perlu model/config sendiri; jangan dipaksakan ke tabel WireGuard `interfaces` dan `peers`.
 5. PPTP harus selalu diberi warning legacy/insecure.
 
+## Generic service-plan endpoints
+
+Semua protocol sekarang punya endpoint generic untuk roadmap dan dry-run service plan:
+
+- `GET /api/v1/vpn/roadmaps/{protocol}` untuk readiness, enablement blockers, dan component list.
+- `GET /api/v1/vpn/service-plans/{protocol}` untuk dry-run runtime/firewall/user plan.
+
+Protocol values: `wireguard`, `openvpn`, `l2tp_ipsec`, `sstp`, `pptp`.
+
+Untuk L2TP/IPsec, SSTP, dan PPTP, UI tidak lagi berhenti di tombol `Coming soon`; halaman `/vpn/{protocol}` menampilkan service plan lengkap. Plan ini tetap tidak menginstall daemon, tidak menjalankan service, dan tidak apply firewall.
+
+Global enablement gates untuk protocol non-WireGuard:
+
+- `VPN_RUNTIME_EXECUTION_ENABLED=true`
+- `VPN_FIREWALL_APPLY_ENABLED=true`
+- `VPN_HOST_VERIFICATION_PASSED=true`
+
+Gate ini hanya readiness signal; protocol tetap baru boleh `available=true` setelah ada driver runtime nyata yang didaftarkan di registry.
+
 ## Next implementation candidate
 
 Protocol paling masuk akal setelah WireGuard adalah OpenVPN karena output client bisa berupa file `.ovpn` dan runtime bisa diisolasi lewat container. Scaffold awal sudah tersedia:
@@ -29,19 +48,30 @@ Protocol paling masuk akal setelah WireGuard adalah OpenVPN karena output client
 - Endpoint roadmap: `GET /api/v1/vpn/openvpn/roadmap`.
 - Endpoint draft instance: `GET/POST /api/v1/vpn/openvpn/instances`.
 - Endpoint persisted runtime manifest: `GET/POST /api/v1/vpn/openvpn/instances/{id}/runtime-manifest`.
+- Endpoint draft users/clients: `GET/POST /api/v1/vpn/openvpn/instances/{id}/users`.
+- Endpoint dry-run lifecycle plan: `POST /api/v1/vpn/openvpn/instances/{id}/lifecycle/{action}`.
+- Endpoint firewall/NAT ownership plan: `POST /api/v1/vpn/openvpn/instances/{id}/firewall-plan`.
+- Endpoint status parser preview: `POST /api/v1/vpn/openvpn/status/parse`.
 - Endpoint preview profil: `POST /api/v1/vpn/openvpn/client-profile/preview`.
 - Endpoint preview runtime container: `POST /api/v1/vpn/openvpn/runtime/preview`.
 - Generator `.ovpn` inline certificate: `backend/openvpn.BuildClientProfile`.
 - Generator preview `server.conf` + `docker-compose.yml`: `backend/openvpn.BuildContainerRuntimeManifest`.
 - UI roadmap + manifest preview: `/vpn/openvpn`.
 
-Endpoint draft instance membutuhkan environment `OPENVPN_SECRET_MASTER_KEY` sebelum menerima CA/cert/private-key material. Endpoint menyimpan ciphertext di `EncryptedSecret` dan mengembalikan reference/status saja; OpenVPN tetap disabled dan tidak menjalankan container. Endpoint runtime manifest per instance menyimpan hasil generator `server.conf` dan `docker-compose.yml` untuk draft tersebut, tetapi tetap tidak menjalankan container.
+Endpoint draft instance membutuhkan environment `OPENVPN_SECRET_MASTER_KEY` sebelum menerima CA/cert/private-key material. Endpoint menyimpan ciphertext di `EncryptedSecret` dan mengembalikan reference/status saja; OpenVPN tetap disabled dan tidak menjalankan container. Endpoint runtime manifest per instance menyimpan hasil generator `server.conf` dan `docker-compose.yml` untuk draft tersebut. Endpoint user draft menyimpan client cert/key terenkripsi. Endpoint lifecycle dan firewall saat ini menghasilkan dry-run plan saja; perintah dan rule tidak dieksekusi/diterapkan otomatis.
 
-Endpoint preview hanya untuk validasi/generator sementara dan tidak berarti OpenVPN sudah enabled. Secret storage dan manifest persistence scaffold sudah ada, tetapi runtime/service OpenVPN belum boleh diaktifkan sebelum lifecycle dan firewall ownership selesai.
+Endpoint preview hanya untuk validasi/generator sementara dan tidak berarti OpenVPN sudah enabled. Secret storage, manifest persistence, lifecycle dry-run, status parser, firewall plan, dan user draft scaffold sudah ada. OpenVPN belum boleh menjadi `available` sampai eksekusi runtime/firewall benar-benar diverifikasi di host dan diaktifkan secara eksplisit.
+
+Operational enablement gates:
+
+- `OPENVPN_RUNTIME_EXECUTION_ENABLED=true` untuk mengizinkan eksekusi command container di phase berikutnya.
+- `OPENVPN_FIREWALL_APPLY_ENABLED=true` untuk mengizinkan apply firewall/NAT rule di phase berikutnya.
+- `OPENVPN_HOST_VERIFICATION_PASSED=true` hanya setelah `go test`, `go build`, dan review dry-run plan lulus di host deployment.
+
+Selama gate belum lengkap, endpoint lifecycle/firewall tetap dry-run plan dan OpenVPN tetap `available=false`.
 
 Sebelum OpenVPN bisa dibuat sebagai instance aktif, lanjutkan dengan:
 
-- Persist generated runtime manifests per instance.
-- Cara start/stop/reload container.
-- Cara membaca connected clients/status.
-- Firewall/NAT ownership.
+- Jalankan Go test/build di host.
+- Review hasil dry-run lifecycle/firewall plan pada environment deployment.
+- Tambahkan feature flag/setting eksplisit untuk mengizinkan eksekusi container dan apply firewall rule.

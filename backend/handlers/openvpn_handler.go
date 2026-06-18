@@ -24,17 +24,27 @@ func NewOpenVPNHandler() *OpenVPNHandler {
 }
 
 func (h *OpenVPNHandler) Roadmap(c *gin.Context) {
+	gates := openvpn.BuildEnablementGates(envFlag("OPENVPN_RUNTIME_EXECUTION_ENABLED"), envFlag("OPENVPN_FIREWALL_APPLY_ENABLED"), envFlag("OPENVPN_HOST_VERIFICATION_PASSED"))
 	dto.OK(c, "data fetched successfully", dto.OpenVPNRoadmapResponse{
 		Available:           false,
 		Status:              "roadmap",
 		RuntimeMode:         "container_openvpn_preview",
 		SecretStorageStatus: "encrypted_secret_scaffold",
 		ManifestStatus:      "persisted_manifest_scaffold",
+		LifecycleStatus:     "dry_run_lifecycle_scaffold",
+		StatusParserStatus:  "status_parser_scaffold",
+		FirewallStatus:      "firewall_plan_scaffold",
+		UserStorageStatus:   "encrypted_user_draft_scaffold",
+		RuntimeExecution:    gateStatus(gates.RuntimeExecutionEnabled),
+		FirewallApply:       gateStatus(gates.FirewallApplyEnabled),
+		HostVerification:    gateStatus(gates.HostVerificationPassed),
+		EnablementReady:     gates.Ready,
+		EnablementBlockers:  gates.Blockers,
 		NextSteps: []string{
-			"add container lifecycle management and status parser",
-			"add firewall/NAT ownership model",
+			"run Go verification on host and review generated lifecycle/firewall plans",
+			"explicitly enable runtime execution after host/container policy is accepted",
 		},
-		BlockedMessage: "OpenVPN is scaffolded but not enabled until runtime lifecycle, status parsing, and firewall ownership are implemented.",
+		BlockedMessage: "OpenVPN scaffold is complete but remains unavailable until host-verified lifecycle execution and firewall application are explicitly enabled.",
 	})
 }
 
@@ -218,6 +228,124 @@ func (h *OpenVPNHandler) GenerateRuntimeManifest(c *gin.Context) {
 	dto.Created(c, "OpenVPN runtime manifest generated; runtime remains disabled", openVPNManifestResponse(record))
 }
 
+func (h *OpenVPNHandler) ListUsers(c *gin.Context) {
+	instance, ok := findOpenVPNInstanceByParam(c)
+	if !ok {
+		return
+	}
+	var users []models.OpenVPNUser
+	if err := database.DB.Where("instance_id = ?", instance.ID).Order("id asc").Find(&users).Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch OpenVPN users")
+		return
+	}
+	responses := make([]dto.OpenVPNUserDraftResponse, 0, len(users))
+	for _, user := range users {
+		responses = append(responses, openVPNUserResponse(user))
+	}
+	dto.OK(c, "data fetched successfully", responses)
+}
+
+func (h *OpenVPNHandler) CreateUserDraft(c *gin.Context) {
+	instance, ok := findOpenVPNInstanceByParam(c)
+	if !ok {
+		return
+	}
+	var req dto.OpenVPNUserDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		dto.Error(c, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if errs := middleware.Validate(req); errs != nil {
+		dto.ValidationError(c, errs)
+		return
+	}
+	masterKey := strings.TrimSpace(os.Getenv("OPENVPN_SECRET_MASTER_KEY"))
+	if masterKey == "" {
+		dto.Error(c, http.StatusServiceUnavailable, "OPENVPN_SECRET_MASTER_KEY is required before saving OpenVPN client certificate material")
+		return
+	}
+	envelope, err := secrets.NewEnvelope(masterKey)
+	if err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to initialize OpenVPN secret envelope")
+		return
+	}
+	draft, err := openvpn.BuildUserDraft(openvpn.UserDraftInput{InstanceID: instance.ID, Name: req.Name, AssignedIP: req.AssignedIP, ClientCertPEM: req.ClientCertPEM, ClientKeyPEM: req.ClientKeyPEM}, envelope)
+	if err != nil {
+		dto.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	tx := database.DB.Begin()
+	if tx.Error != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to start transaction")
+		return
+	}
+	if err := tx.Create(&draft.User).Error; err != nil {
+		tx.Rollback()
+		dto.Error(c, http.StatusInternalServerError, "failed to create OpenVPN user draft")
+		return
+	}
+	for i := range draft.Secrets {
+		draft.Secrets[i].OwnerID = draft.User.ID
+		draft.Secrets[i].Ref = secrets.BuildRef("openvpn-client-"+strconv.Itoa(int(instance.ID))+"-"+draft.User.Name, draft.User.ID, draft.Secrets[i].Name)
+		switch draft.Secrets[i].Name {
+		case "client-cert-pem":
+			draft.User.CertRef = draft.Secrets[i].Ref
+		case "client-key-pem":
+			draft.User.KeyRef = draft.Secrets[i].Ref
+		}
+		if err := tx.Create(&draft.Secrets[i]).Error; err != nil {
+			tx.Rollback()
+			dto.Error(c, http.StatusInternalServerError, "failed to store encrypted OpenVPN client secret")
+			return
+		}
+	}
+	if err := tx.Save(&draft.User).Error; err != nil {
+		tx.Rollback()
+		dto.Error(c, http.StatusInternalServerError, "failed to update OpenVPN user secret references")
+		return
+	}
+	if err := tx.Commit().Error; err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to commit OpenVPN user draft")
+		return
+	}
+	dto.Created(c, "OpenVPN user draft saved; runtime remains disabled", openVPNUserResponse(draft.User))
+}
+
+func (h *OpenVPNHandler) LifecyclePlan(c *gin.Context) {
+	instance, ok := findOpenVPNInstanceByParam(c)
+	if !ok {
+		return
+	}
+	plan, err := openvpn.BuildLifecyclePlan(instance, c.Param("action"))
+	if err != nil {
+		dto.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	dto.OK(c, "OpenVPN lifecycle plan generated; commands were not executed", openVPNLifecycleResponse(plan))
+}
+
+func (h *OpenVPNHandler) FirewallPlan(c *gin.Context) {
+	instance, ok := findOpenVPNInstanceByParam(c)
+	if !ok {
+		return
+	}
+	plan, err := openvpn.BuildFirewallPlan(instance)
+	if err != nil {
+		dto.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	dto.OK(c, "OpenVPN firewall plan generated; rules were not applied", openVPNFirewallResponse(plan))
+}
+
+func (h *OpenVPNHandler) ParseStatus(c *gin.Context) {
+	var req dto.OpenVPNStatusPreviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		dto.Error(c, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	dto.OK(c, "OpenVPN status parsed", openVPNStatusResponse(openvpn.ParseStatusLog(req.RawStatus)))
+}
+
 func (h *OpenVPNHandler) PreviewClientProfile(c *gin.Context) {
 	var req dto.OpenVPNClientProfilePreviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -285,6 +413,18 @@ func (h *OpenVPNHandler) PreviewRuntimeManifest(c *gin.Context) {
 	})
 }
 
+func envFlag(key string) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	return value == "1" || value == "true" || value == "yes" || value == "on"
+}
+
+func gateStatus(enabled bool) string {
+	if enabled {
+		return "enabled"
+	}
+	return "disabled"
+}
+
 func findOpenVPNInstanceByParam(c *gin.Context) (models.OpenVPNInstance, bool) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
@@ -317,6 +457,33 @@ func openVPNManifestResponse(manifest models.OpenVPNRuntimeManifest) dto.OpenVPN
 		Warnings:         warnings,
 		GenerationStatus: manifest.GenerationStatus,
 	}
+}
+
+func openVPNStatusResponse(status openvpn.StatusSnapshot) dto.OpenVPNStatusResponse {
+	clients := make([]dto.OpenVPNStatusClientInfo, 0, len(status.Clients))
+	for _, client := range status.Clients {
+		clients = append(clients, dto.OpenVPNStatusClientInfo{CommonName: client.CommonName, RealAddress: client.RealAddress, VirtualAddress: client.VirtualAddress, BytesReceived: client.BytesReceived, BytesSent: client.BytesSent, ConnectedSince: client.ConnectedSince})
+	}
+	return dto.OpenVPNStatusResponse{State: status.State, Clients: clients, Raw: status.Raw}
+}
+
+func openVPNLifecycleResponse(plan openvpn.LifecyclePlan) dto.OpenVPNLifecyclePlanResponse {
+	return dto.OpenVPNLifecyclePlanResponse{Action: plan.Action, ExecutionMode: plan.ExecutionMode, Status: plan.Status, ProjectName: plan.ProjectName, ContainerName: plan.ContainerName, Commands: plan.Commands, Warnings: plan.Warnings}
+}
+
+func openVPNFirewallResponse(plan openvpn.FirewallPlan) dto.OpenVPNFirewallPlanResponse {
+	return dto.OpenVPNFirewallPlanResponse{Status: plan.Status, OwnershipKey: plan.OwnershipKey, Rules: plan.Rules, TeardownRules: plan.TeardownRules, Warnings: plan.Warnings}
+}
+
+func openVPNUserResponse(user models.OpenVPNUser) dto.OpenVPNUserDraftResponse {
+	refs := map[string]string{}
+	if user.CertRef != "" {
+		refs["client_cert"] = user.CertRef
+	}
+	if user.KeyRef != "" {
+		refs["client_key"] = "stored"
+	}
+	return dto.OpenVPNUserDraftResponse{ID: user.ID, InstanceID: user.InstanceID, Name: user.Name, AssignedIP: user.AssignedIP, Enabled: user.Enabled, SecretStorageStatus: "encrypted_secret_scaffold", SecretRefs: refs}
 }
 
 func openVPNInstanceResponse(instance models.OpenVPNInstance) dto.OpenVPNInstanceDraftResponse {

@@ -63,12 +63,52 @@ export interface VPNInstanceStatus {
   kernel_message?: string
 }
 
+export interface ProtocolRoadmap {
+  protocol: VPNProtocol
+  label: string
+  available: boolean
+  status: string
+  legacy_insecure: boolean
+  runtime_strategy: string
+  implementation_level: string
+  components: string[]
+  runtime_execution: string
+  firewall_apply: string
+  host_verification: string
+  enablement_ready: boolean
+  enablement_blockers: string[]
+  next_steps: string[]
+  blocked_message: string
+}
+
+export interface ProtocolServicePlan {
+  protocol: VPNProtocol
+  label: string
+  execution_mode: string
+  status: string
+  components: string[]
+  runtime_plan: string[]
+  firewall_plan: string[]
+  user_plan: string[]
+  warnings: string[]
+  legacy_insecure: boolean
+}
+
 export interface OpenVPNRoadmap {
   available: boolean
   status: string
   runtime_mode: string
   secret_storage_status: string
   manifest_status: string
+  lifecycle_status: string
+  status_parser_status: string
+  firewall_status: string
+  user_storage_status: string
+  runtime_execution: string
+  firewall_apply: string
+  host_verification: string
+  enablement_ready: boolean
+  enablement_blockers: string[]
   next_steps: string[]
   blocked_message: string
 }
@@ -86,6 +126,39 @@ export interface OpenVPNRuntimeManifest {
   runtime_mode: string
   files: Record<string, string>
   warnings: string[]
+}
+
+export interface OpenVPNLifecyclePlan {
+  action: string
+  execution_mode: string
+  status: string
+  project_name: string
+  container_name: string
+  commands: string[]
+  warnings: string[]
+}
+
+export interface OpenVPNFirewallPlan {
+  status: string
+  ownership_key: string
+  rules: string[]
+  teardown_rules: string[]
+  warnings: string[]
+}
+
+export interface OpenVPNStatusClientInfo {
+  common_name: string
+  real_address: string
+  virtual_address: string
+  bytes_received: number
+  bytes_sent: number
+  connected_since: string
+}
+
+export interface OpenVPNStatusResponse {
+  state: string
+  clients: OpenVPNStatusClientInfo[]
+  raw?: string
 }
 
 export interface OpenVPNPersistedRuntimeManifest {

@@ -5,13 +5,18 @@ import type {
   PaginatedResult,
   PaginationMeta,
   OpenVPNInstanceDraft,
+  OpenVPNLifecyclePlan,
+  OpenVPNFirewallPlan,
   OpenVPNPersistedRuntimeManifest,
   OpenVPNRoadmap,
   OpenVPNRuntimeManifest,
   OpenVPNRuntimeManifestPreviewRequest,
+  ProtocolRoadmap,
+  ProtocolServicePlan,
   VPNInstance,
   VPNInstanceStatus,
   VPNProtocolInfo,
+  VPNProtocol,
   VPNUser,
 } from "./types"
 
@@ -24,6 +29,16 @@ function paginated<T>(response: ApiResponse<T[]>): PaginatedResult<T> {
 export async function listVPNProtocols(): Promise<VPNProtocolInfo[]> {
   const { data } = await api.get<ApiResponse<VPNProtocolInfo[]>>("/vpn/protocols")
   return data.data ?? []
+}
+
+export async function getProtocolRoadmap(protocol: VPNProtocol): Promise<ProtocolRoadmap> {
+  const { data } = await api.get<ApiResponse<ProtocolRoadmap>>(`/vpn/roadmaps/${protocol}`)
+  return data.data
+}
+
+export async function getProtocolServicePlan(protocol: VPNProtocol): Promise<ProtocolServicePlan> {
+  const { data } = await api.get<ApiResponse<ProtocolServicePlan>>(`/vpn/service-plans/${protocol}`)
+  return data.data
 }
 
 export async function getOpenVPNRoadmap(): Promise<OpenVPNRoadmap> {
@@ -43,6 +58,16 @@ export async function getOpenVPNRuntimeManifest(instanceId: number): Promise<Ope
 
 export async function generateOpenVPNRuntimeManifest(instanceId: number): Promise<OpenVPNPersistedRuntimeManifest> {
   const { data } = await api.post<ApiResponse<OpenVPNPersistedRuntimeManifest>>(`/vpn/openvpn/instances/${instanceId}/runtime-manifest`)
+  return data.data
+}
+
+export async function planOpenVPNLifecycle(instanceId: number, action = "start"): Promise<OpenVPNLifecyclePlan> {
+  const { data } = await api.post<ApiResponse<OpenVPNLifecyclePlan>>(`/vpn/openvpn/instances/${instanceId}/lifecycle/${action}`)
+  return data.data
+}
+
+export async function planOpenVPNFirewall(instanceId: number): Promise<OpenVPNFirewallPlan> {
+  const { data } = await api.post<ApiResponse<OpenVPNFirewallPlan>>(`/vpn/openvpn/instances/${instanceId}/firewall-plan`)
   return data.data
 }
 

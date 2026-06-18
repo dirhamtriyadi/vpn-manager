@@ -99,7 +99,7 @@ export function ProtocolSelector() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">New VPN instance</h2>
           <p className="text-sm text-muted-foreground">
-            Choose a protocol. WireGuard is available now; the others are staged for the multi-protocol roadmap.
+            Choose a protocol. WireGuard is available now; every other protocol has a dry-run service plan before host execution is enabled.
           </p>
         </div>
         <Button variant="outline" asChild>
@@ -165,12 +165,17 @@ export function ProtocolSelector() {
                   </Link>
                 </Button>
               ) : protocol.id === "openvpn" ? (
-                <Button variant="outline" asChild>
-                  <Link to="/vpn/openvpn">View OpenVPN requirements</Link>
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" asChild>
+                    <Link to="/vpn/openvpn">OpenVPN advanced requirements</Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link to={`/vpn/${protocol.id}`}>Service plan</Link>
+                  </Button>
+                </div>
               ) : (
-                <Button disabled variant="outline">
-                  Coming soon
+                <Button variant="outline" asChild>
+                  <Link to={`/vpn/${protocol.id}`}>View service plan</Link>
                 </Button>
               )}
             </CardContent>

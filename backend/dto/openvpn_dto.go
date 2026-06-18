@@ -6,6 +6,15 @@ type OpenVPNRoadmapResponse struct {
 	RuntimeMode         string   `json:"runtime_mode"`
 	SecretStorageStatus string   `json:"secret_storage_status"`
 	ManifestStatus      string   `json:"manifest_status"`
+	LifecycleStatus     string   `json:"lifecycle_status"`
+	StatusParserStatus  string   `json:"status_parser_status"`
+	FirewallStatus      string   `json:"firewall_status"`
+	UserStorageStatus   string   `json:"user_storage_status"`
+	RuntimeExecution    string   `json:"runtime_execution"`
+	FirewallApply       string   `json:"firewall_apply"`
+	HostVerification    string   `json:"host_verification"`
+	EnablementReady     bool     `json:"enablement_ready"`
+	EnablementBlockers  []string `json:"enablement_blockers"`
 	NextSteps           []string `json:"next_steps"`
 	BlockedMessage      string   `json:"blocked_message"`
 }
@@ -51,6 +60,60 @@ type OpenVPNInstanceDraftResponse struct {
 	RuntimeMode         string            `json:"runtime_mode"`
 	SecretStorageStatus string            `json:"secret_storage_status"`
 	SecretRefs          map[string]string `json:"secret_refs"`
+}
+
+type OpenVPNUserDraftRequest struct {
+	Name          string `json:"name" validate:"required"`
+	AssignedIP    string `json:"assigned_ip" validate:"omitempty,ip"`
+	ClientCertPEM string `json:"client_cert_pem" validate:"required"`
+	ClientKeyPEM  string `json:"client_key_pem" validate:"required"`
+}
+
+type OpenVPNUserDraftResponse struct {
+	ID                  uint              `json:"id"`
+	InstanceID          uint              `json:"instance_id"`
+	Name                string            `json:"name"`
+	AssignedIP          string            `json:"assigned_ip"`
+	Enabled             bool              `json:"enabled"`
+	SecretStorageStatus string            `json:"secret_storage_status"`
+	SecretRefs          map[string]string `json:"secret_refs"`
+}
+
+type OpenVPNLifecyclePlanResponse struct {
+	Action        string   `json:"action"`
+	ExecutionMode string   `json:"execution_mode"`
+	Status        string   `json:"status"`
+	ProjectName   string   `json:"project_name"`
+	ContainerName string   `json:"container_name"`
+	Commands      []string `json:"commands"`
+	Warnings      []string `json:"warnings"`
+}
+
+type OpenVPNFirewallPlanResponse struct {
+	Status        string   `json:"status"`
+	OwnershipKey  string   `json:"ownership_key"`
+	Rules         []string `json:"rules"`
+	TeardownRules []string `json:"teardown_rules"`
+	Warnings      []string `json:"warnings"`
+}
+
+type OpenVPNStatusPreviewRequest struct {
+	RawStatus string `json:"raw_status"`
+}
+
+type OpenVPNStatusResponse struct {
+	State   string                    `json:"state"`
+	Clients []OpenVPNStatusClientInfo `json:"clients"`
+	Raw     string                    `json:"raw,omitempty"`
+}
+
+type OpenVPNStatusClientInfo struct {
+	CommonName     string `json:"common_name"`
+	RealAddress    string `json:"real_address"`
+	VirtualAddress string `json:"virtual_address"`
+	BytesReceived  int64  `json:"bytes_received"`
+	BytesSent      int64  `json:"bytes_sent"`
+	ConnectedSince string `json:"connected_since"`
 }
 
 type OpenVPNRuntimeManifestResponse struct {

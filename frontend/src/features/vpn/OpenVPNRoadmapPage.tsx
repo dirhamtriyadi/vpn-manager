@@ -5,9 +5,18 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { apiErrorMessage } from "@/lib/api"
-import { generateOpenVPNRuntimeManifest, getOpenVPNRoadmap, listOpenVPNInstanceDrafts, previewOpenVPNRuntimeManifest } from "./api"
+import {
+  generateOpenVPNRuntimeManifest,
+  getOpenVPNRoadmap,
+  listOpenVPNInstanceDrafts,
+  planOpenVPNFirewall,
+  planOpenVPNLifecycle,
+  previewOpenVPNRuntimeManifest,
+} from "./api"
 import type {
+  OpenVPNFirewallPlan,
   OpenVPNInstanceDraft,
+  OpenVPNLifecyclePlan,
   OpenVPNPersistedRuntimeManifest,
   OpenVPNRoadmap,
   OpenVPNRuntimeManifest,
@@ -19,10 +28,23 @@ const fallbackRoadmap: OpenVPNRoadmap = {
   runtime_mode: "container_openvpn_preview",
   secret_storage_status: "encrypted_secret_scaffold",
   manifest_status: "persisted_manifest_scaffold",
-  blocked_message: "OpenVPN is scaffolded but not enabled until runtime lifecycle, status parsing, and firewall ownership are implemented.",
+  lifecycle_status: "dry_run_lifecycle_scaffold",
+  status_parser_status: "status_parser_scaffold",
+  firewall_status: "firewall_plan_scaffold",
+  user_storage_status: "encrypted_user_draft_scaffold",
+  runtime_execution: "disabled",
+  firewall_apply: "disabled",
+  host_verification: "disabled",
+  enablement_ready: false,
+  enablement_blockers: [
+    "OPENVPN_RUNTIME_EXECUTION_ENABLED must be true before container commands can run",
+    "OPENVPN_FIREWALL_APPLY_ENABLED must be true before firewall rules can be applied",
+    "OPENVPN_HOST_VERIFICATION_PASSED must be true after host-side go test/build and plan review",
+  ],
+  blocked_message: "OpenVPN scaffold is complete but remains unavailable until host-verified lifecycle execution and firewall application are explicitly enabled.",
   next_steps: [
-    "add container lifecycle management and status parser",
-    "add firewall/NAT ownership model",
+    "run Go verification on host and review generated lifecycle/firewall plans",
+    "explicitly enable runtime execution after host/container policy is accepted",
   ],
 }
 
@@ -40,7 +62,10 @@ export function OpenVPNRoadmapPage() {
   const [manifest, setManifest] = useState<OpenVPNRuntimeManifest | null>(null)
   const [drafts, setDrafts] = useState<OpenVPNInstanceDraft[]>([])
   const [persistedManifest, setPersistedManifest] = useState<OpenVPNPersistedRuntimeManifest | null>(null)
+  const [lifecyclePlan, setLifecyclePlan] = useState<OpenVPNLifecyclePlan | null>(null)
+  const [firewallPlan, setFirewallPlan] = useState<OpenVPNFirewallPlan | null>(null)
   const [generatingManifestId, setGeneratingManifestId] = useState<number | null>(null)
+  const [planningActionId, setPlanningActionId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [manifestError, setManifestError] = useState<string | null>(null)
   const [draftError, setDraftError] = useState<string | null>(null)
@@ -87,6 +112,23 @@ export function OpenVPNRoadmapPage() {
       setManifestError(apiErrorMessage(e, "Failed to persist OpenVPN runtime manifest."))
     } finally {
       setGeneratingManifestId(null)
+    }
+  }
+
+  const handlePlanRuntime = async (instanceId: number) => {
+    setPlanningActionId(instanceId)
+    setManifestError(null)
+    try {
+      const [lifecycle, firewall] = await Promise.all([
+        planOpenVPNLifecycle(instanceId, "start"),
+        planOpenVPNFirewall(instanceId),
+      ])
+      setLifecyclePlan(lifecycle)
+      setFirewallPlan(firewall)
+    } catch (e) {
+      setManifestError(apiErrorMessage(e, "Failed to generate OpenVPN runtime plans."))
+    } finally {
+      setPlanningActionId(null)
     }
   }
 
@@ -146,11 +188,42 @@ export function OpenVPNRoadmapPage() {
             <div className="rounded-md border bg-muted/50 p-3 text-sm md:col-span-2">
               Manifest status: <span className="font-mono">{roadmap.manifest_status}</span>
             </div>
+            <div className="rounded-md border bg-muted/50 p-3 text-sm">
+              Lifecycle: <span className="font-mono">{roadmap.lifecycle_status}</span>
+            </div>
+            <div className="rounded-md border bg-muted/50 p-3 text-sm">
+              Status parser: <span className="font-mono">{roadmap.status_parser_status}</span>
+            </div>
+            <div className="rounded-md border bg-muted/50 p-3 text-sm">
+              Firewall/NAT: <span className="font-mono">{roadmap.firewall_status}</span>
+            </div>
+            <div className="rounded-md border bg-muted/50 p-3 text-sm">
+              User storage: <span className="font-mono">{roadmap.user_storage_status}</span>
+            </div>
+            <div className="rounded-md border bg-muted/50 p-3 text-sm">
+              Runtime execution: <span className="font-mono">{roadmap.runtime_execution}</span>
+            </div>
+            <div className="rounded-md border bg-muted/50 p-3 text-sm">
+              Firewall apply: <span className="font-mono">{roadmap.firewall_apply}</span>
+            </div>
+            <div className="rounded-md border bg-muted/50 p-3 text-sm md:col-span-2">
+              Host verification: <span className="font-mono">{roadmap.host_verification}</span>
+            </div>
           </div>
           <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{roadmap.blocked_message}</span>
           </div>
+          {roadmap.enablement_blockers.length > 0 && (
+            <div className="rounded-md border bg-muted/50 p-3 text-sm">
+              <div className="mb-2 font-medium">Operational enablement blockers</div>
+              <ul className="list-disc space-y-1 pl-6 text-muted-foreground">
+                {roadmap.enablement_blockers.map((blocker) => (
+                  <li key={blocker}>{blocker}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
               <FileKey2 className="h-4 w-4" />
@@ -202,6 +275,14 @@ export function OpenVPNRoadmapPage() {
                       >
                         {generatingManifestId === draft.id ? "Generating..." : "Generate manifest"}
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void handlePlanRuntime(draft.id)}
+                        disabled={planningActionId === draft.id}
+                      >
+                        {planningActionId === draft.id ? "Planning..." : "Plan runtime"}
+                      </Button>
                     </div>
                   </div>
                   <div className="mt-2 grid gap-2 text-muted-foreground md:grid-cols-3">
@@ -216,6 +297,18 @@ export function OpenVPNRoadmapPage() {
           {persistedManifest && (
             <div className="rounded-md border bg-muted/50 p-3 text-sm">
               Persisted manifest #{persistedManifest.id} for instance #{persistedManifest.instance_id}: {persistedManifest.generation_status}
+            </div>
+          )}
+          {lifecyclePlan && (
+            <div className="space-y-2 rounded-md border bg-muted/50 p-3 text-sm">
+              <div className="font-medium">Lifecycle plan: {lifecyclePlan.action} / {lifecyclePlan.execution_mode}</div>
+              <pre className="overflow-auto whitespace-pre-wrap text-xs">{lifecyclePlan.commands.join("\n")}</pre>
+            </div>
+          )}
+          {firewallPlan && (
+            <div className="space-y-2 rounded-md border bg-muted/50 p-3 text-sm">
+              <div className="font-medium">Firewall ownership: {firewallPlan.ownership_key}</div>
+              <pre className="overflow-auto whitespace-pre-wrap text-xs">{firewallPlan.rules.join("\n")}</pre>
             </div>
           )}
         </CardContent>

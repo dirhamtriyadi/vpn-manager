@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/example/wg-panel/database"
@@ -50,6 +52,38 @@ func (h *VPNHandler) protocolResponse(spec vpnsvc.ProtocolSpec) dto.VPNProtocolR
 		QRCode:               capabilities.QRCode,
 		RequiresCertificates: capabilities.RequiresCertificates,
 	}
+}
+
+func (h *VPNHandler) ProtocolRoadmap(c *gin.Context) {
+	protocol := models.VPNProtocol(c.Param("protocol"))
+	roadmap, err := vpnsvc.BuildProtocolRoadmap(protocol, envFlagAny("VPN_RUNTIME_EXECUTION_ENABLED"), envFlagAny("VPN_FIREWALL_APPLY_ENABLED"), envFlagAny("VPN_HOST_VERIFICATION_PASSED"))
+	if err != nil {
+		dto.Error(c, http.StatusNotFound, "vpn protocol roadmap not found")
+		return
+	}
+	if h.registry.Supports(protocol) {
+		roadmap.Available = true
+		roadmap.Status = vpnsvc.ProtocolStatusAvailable
+		roadmap.BlockedMessage = "Protocol has a registered runtime driver."
+		roadmap.EnablementBlockers = []string{}
+		roadmap.EnablementReady = true
+	}
+	dto.OK(c, "data fetched successfully", roadmap)
+}
+
+func (h *VPNHandler) ProtocolServicePlan(c *gin.Context) {
+	protocol := models.VPNProtocol(c.Param("protocol"))
+	plan, err := vpnsvc.BuildProtocolServicePlan(protocol)
+	if err != nil {
+		dto.Error(c, http.StatusNotFound, "vpn protocol service plan not found")
+		return
+	}
+	dto.OK(c, "data fetched successfully", plan)
+}
+
+func envFlagAny(key string) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	return value == "1" || value == "true" || value == "yes" || value == "on"
 }
 
 func (h *VPNHandler) Instances(c *gin.Context) {

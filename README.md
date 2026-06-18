@@ -7,7 +7,8 @@ Monorepo aplikasi panel web untuk mengelola VPN server dan user dari browser. Sa
 - Fondasi VPN Manager multi-protocol dengan daftar protocol: WireGuard, OpenVPN, L2TP/IPsec, SSTP, dan PPTP legacy/insecure.
 - Endpoint generic awal `/api/v1/vpn/*` untuk protocol, instance, user, dan status.
 - Registry/capability scaffold untuk runtime protocol; saat ini hanya WireGuard yang `available` dengan runtime `host_kernel_netlink`.
-- OpenVPN roadmap scaffold mencakup metadata model, `.ovpn` generator, container manifest preview, encrypted secret-reference foundation, draft instance endpoint yang menyimpan CA/cert/key sebagai ciphertext, dan persisted runtime manifest per instance; OpenVPN tetap belum `available` sampai lifecycle/status/firewall selesai.
+- OpenVPN roadmap scaffold mencakup metadata model, `.ovpn` generator, container manifest preview, encrypted secret-reference foundation, draft instance/user endpoints yang menyimpan CA/cert/key sebagai ciphertext, persisted runtime manifest per instance, dry-run lifecycle plan, status parser, firewall/NAT ownership plan, dan operational enablement gates (`OPENVPN_RUNTIME_EXECUTION_ENABLED`, `OPENVPN_FIREWALL_APPLY_ENABLED`, `OPENVPN_HOST_VERIFICATION_PASSED`); OpenVPN tetap belum `available` sampai eksekusi runtime/firewall diverifikasi di host dan diaktifkan eksplisit.
+- L2TP/IPsec, SSTP, dan PPTP sekarang punya generic roadmap/service-plan endpoints (`/api/v1/vpn/roadmaps/{protocol}`, `/api/v1/vpn/service-plans/{protocol}`) plus halaman UI `/vpn/{protocol}`; ini dry-run scaffold, bukan daemon/service execution.
 - Roadmap protocol terdokumentasi di `docs/vpn-protocol-roadmap.md`.
 - Buat WireGuard interface/server dari UI.
 - Generate keypair server/client otomatis.
