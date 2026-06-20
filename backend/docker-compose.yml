@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-vpn_manager}
     ports:
-      - "${DB_PORT:-5434}:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -27,11 +27,11 @@ services:
     cap_add:
       - NET_ADMIN
     environment:
-      SERVER_PORT: ${SERVER_PORT:-8083}
+      SERVER_PORT: ${SERVER_PORT:-8080}
       GIN_MODE: ${GIN_MODE:-release}
       # With host networking the API reaches Postgres on the host's published port.
       DB_HOST: ${DB_HOST:-localhost}
-      DB_PORT: ${DB_PORT:-5434}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_NAME: ${DB_NAME:-vpn_manager}
@@ -57,7 +57,7 @@ services:
     build:
       context: ../frontend
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8083/api/v1}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api/v1}
     ports:
       - "${WEB_PORT:-5173}:80"
     restart: unless-stopped
