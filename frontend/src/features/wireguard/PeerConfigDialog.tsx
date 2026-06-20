@@ -165,6 +165,9 @@ function buildRouterOSTeardownScript(peer: Peer): string {
     `/ip/address/remove [find interface="${quoteRouterOS(name)}"]`,
     `/interface/wireguard/peers/remove [find interface="${quoteRouterOS(name)}"]`,
     `/ip/route/remove [find comment="vpn-manager ${quoteRouterOS(name)}"]`,
+    // The optional full-tunnel endpoint-pin route has a distinct comment and
+    // points at the WAN (not the wg interface), so it must be removed explicitly.
+    `/ip/route/remove [find comment="vpn-manager ${quoteRouterOS(name)} endpoint"]`,
     `/ip/firewall/nat/remove [find comment="vpn-manager ${quoteRouterOS(name)}"]`,
     `/ip/firewall/filter/remove [find comment="vpn-manager ${quoteRouterOS(name)}"]`,
     `/interface/wireguard/remove [find name="${quoteRouterOS(name)}"]`,
