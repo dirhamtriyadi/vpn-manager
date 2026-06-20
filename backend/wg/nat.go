@@ -24,13 +24,19 @@ type rule struct {
 	args  []string
 }
 
-// natRules returns the three rules that make a tunnel subnet route to the
-// internet via egress: source NAT plus both forwarding directions.
+// natRules returns the rules that make a tunnel subnet route to the internet via
+// egress (source NAT plus both forwarding directions) and that let peers on the
+// same tunnel reach each other.
 func natRules(subnet, device, egress string) []rule {
 	return []rule{
 		{table: "nat", chain: "POSTROUTING", args: []string{"-s", subnet, "-o", egress, "-j", "MASQUERADE"}},
 		{chain: "FORWARD", args: []string{"-i", device, "-o", egress, "-j", "ACCEPT"}},
 		{chain: "FORWARD", args: []string{"-i", egress, "-o", device, "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"}},
+		// Peer-to-peer within the same tunnel (hub-and-spoke): the packet enters
+		// and leaves on the same wg device. Without this, Docker's default FORWARD
+		// DROP policy silently blocks one peer from reaching another even though
+		// each peer's handshake with the server is fine.
+		{chain: "FORWARD", args: []string{"-i", device, "-o", device, "-j", "ACCEPT"}},
 	}
 }
 

@@ -26,14 +26,20 @@ func TestSubnetFor(t *testing.T) {
 
 func TestNatRules(t *testing.T) {
 	rules := natRules("10.8.0.0/24", "wg0", "eth0")
-	if len(rules) != 3 {
-		t.Fatalf("expected 3 rules, got %d", len(rules))
+	if len(rules) != 4 {
+		t.Fatalf("expected 4 rules, got %d", len(rules))
 	}
 	if rules[0].table != "nat" || rules[0].chain != "POSTROUTING" {
 		t.Fatalf("first rule should be nat/POSTROUTING, got %s/%s", rules[0].table, rules[0].chain)
 	}
 	if rules[1].table != "" || rules[1].chain != "FORWARD" {
 		t.Fatalf("forward rule should be filter/FORWARD, got %q/%s", rules[1].table, rules[1].chain)
+	}
+	// The last rule allows peer-to-peer traffic within the tunnel (wg0 -> wg0).
+	last := rules[len(rules)-1]
+	body := strings.Join(last.args, " ")
+	if last.chain != "FORWARD" || body != "-i wg0 -o wg0 -j ACCEPT" {
+		t.Fatalf("intra-tunnel rule = %s %q, want FORWARD \"-i wg0 -o wg0 -j ACCEPT\"", last.chain, body)
 	}
 }
 
