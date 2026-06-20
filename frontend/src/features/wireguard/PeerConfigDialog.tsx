@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { copyToClipboard } from "@/lib/clipboard"
 import {
   downloadPeerConfigFile,
   getPeerConfigText,
@@ -225,21 +226,24 @@ export function PeerConfigDialog({ iface, peer, onClose }: Props) {
   }, [peer])
 
   async function copyConfig() {
-    await navigator.clipboard.writeText(config)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
+    if (await copyToClipboard(config)) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }
   }
 
   async function copyRouterOSScript() {
-    await navigator.clipboard.writeText(routerOSScript)
-    setCopiedScript(true)
-    setTimeout(() => setCopiedScript(false), 1500)
+    if (await copyToClipboard(routerOSScript)) {
+      setCopiedScript(true)
+      setTimeout(() => setCopiedScript(false), 1500)
+    }
   }
 
   async function copyRouterOSTeardownScript() {
-    await navigator.clipboard.writeText(routerOSTeardownScript)
-    setCopiedTeardown(true)
-    setTimeout(() => setCopiedTeardown(false), 1500)
+    if (await copyToClipboard(routerOSTeardownScript)) {
+      setCopiedTeardown(true)
+      setTimeout(() => setCopiedTeardown(false), 1500)
+    }
   }
 
   async function downloadConfig() {

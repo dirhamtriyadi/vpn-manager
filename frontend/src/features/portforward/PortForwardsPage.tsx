@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { apiErrorMessage } from "@/lib/api"
+import { copyToClipboard } from "@/lib/clipboard"
 import { useAuth } from "@/features/auth/AuthContext"
 import { ConfirmDialog } from "@/features/admin/ConfirmDialog"
 import type { Peer, WGInterface } from "@/features/wireguard/types"
@@ -178,9 +179,13 @@ export function PortForwardsPage() {
                             variant="outline"
                             size="sm"
                             title="Copy MikroTik dstnat command"
-                            onClick={() => {
-                              navigator.clipboard.writeText(mikrotikHint(pf))
-                              setNotice("MikroTik command copied — replace LAN_IP / LAN_PORT with your device.")
+                            onClick={async () => {
+                              const ok = await copyToClipboard(mikrotikHint(pf))
+                              setNotice(
+                                ok
+                                  ? "MikroTik command copied — replace LAN_IP / LAN_PORT with your device."
+                                  : "Copy failed — select and copy this manually:\n" + mikrotikHint(pf),
+                              )
                             }}
                           >
                             MikroTik
