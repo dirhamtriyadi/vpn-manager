@@ -43,9 +43,21 @@ func main() {
 		log.Fatalf("failed to seed RBAC: %v", err)
 	}
 
-	// Restore runtime state on startup: bring enabled interfaces back up and
-	// re-apply port-forward firewall rules (so they survive a host reboot).
-	handlers.BootstrapRuntime()
+	// Restore runtime state on startup off the serve path: bring enabled
+	// interfaces back up and re-apply port-forward firewall rules (so they
+	// survive a host reboot). Run it in a goroutine with a panic guard so a slow
+	// or blocked netlink/iptables call can never delay — or prevent — the HTTP
+	// server from listening. (A populated DB makes this do real kernel work at
+	// boot; an empty one makes it a no-op, which is why an inline version only
+	// ever hung after the volume had persisted state.)
+	go func() {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("bootstrap runtime panicked (ignored, API still serving): %v", rec)
+			}
+		}()
+		handlers.BootstrapRuntime()
+	}()
 
 	r := routes.Setup(cfg)
 

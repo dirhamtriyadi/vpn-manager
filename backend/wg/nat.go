@@ -156,7 +156,13 @@ func iptablesArgs(action string, r rule) []string {
 }
 
 func runIptables(args ...string) error {
-	out, err := exec.Command("iptables", args...).CombinedOutput()
+	// -w makes iptables wait for the xtables lock (/run/xtables.lock) rather than
+	// failing immediately when another process holds it. Under network_mode: host
+	// the lock is shared with Docker's own firewall churn and with concurrent
+	// reconciles, so without -w a boot-time burst of rule calls can spuriously
+	// error out. Wait up to 5s per call.
+	full := append([]string{"-w", "5"}, args...)
+	out, err := exec.Command("iptables", full...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("iptables %s: %v (%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}

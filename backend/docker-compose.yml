@@ -13,8 +13,9 @@ services:
       - "${DB_BIND:-127.0.0.1}:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-vpn_manager}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -30,6 +31,11 @@ services:
     network_mode: host
     cap_add:
       - NET_ADMIN
+    # Self-heal: if the API ever exits at boot (e.g. it lost a connection race
+    # against a Postgres still doing WAL recovery), restart it instead of leaving
+    # it Exited. Previously the API had no restart policy, so one bad boot left it
+    # down until "docker compose down -v" wiped the volume.
+    restart: unless-stopped
     environment:
       SERVER_PORT: ${SERVER_PORT:-8080}
       GIN_MODE: ${GIN_MODE:-release}
