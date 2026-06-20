@@ -9,7 +9,7 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 })
 
-const TOKEN_KEY = "wg_panel_token"
+const TOKEN_KEY = "vpn_manager_token"
 
 /** Read the stored bearer token, if any. */
 export function getToken(): string | null {

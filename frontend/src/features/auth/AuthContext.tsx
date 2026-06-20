@@ -10,7 +10,7 @@ import {
 import { clearToken, getToken, setToken, setUnauthorizedHandler } from "@/lib/api"
 import { login as loginRequest } from "./api"
 
-const USER_KEY = "wg_panel_user"
+const USER_KEY = "vpn_manager_user"
 
 interface AuthState {
   isAuthenticated: boolean

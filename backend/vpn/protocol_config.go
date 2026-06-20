@@ -5,7 +5,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/example/wg-panel/models"
+	"github.com/example/vpn-manager/models"
 )
 
 type ProtocolConfigInput struct {
@@ -74,7 +74,7 @@ func BuildProtocolConfigPreview(input ProtocolConfigInput) (ProtocolConfigPrevie
 	case models.ProtocolSSTP:
 		preview.SecretRefs["tls_cert"] = "[ENCRYPTED_SECRET_REF]"
 		preview.SecretRefs["tls_key"] = "[ENCRYPTED_SECRET_REF]"
-		preview.Files["sstpd.conf"] = fmt.Sprintf("listen = 0.0.0.0\nport = %d\ncert = /var/lib/wg-panel/sstp/%s/tls.crt\nkey = /var/lib/wg-panel/sstp/%s/tls.key\nlocal = %s\nremote = %s\nppp = /usr/sbin/pppd\n", port, name, name, firstUsableIP(pool), pool)
+		preview.Files["sstpd.conf"] = fmt.Sprintf("listen = 0.0.0.0\nport = %d\ncert = /var/lib/vpn-manager/sstp/%s/tls.crt\nkey = /var/lib/vpn-manager/sstp/%s/tls.key\nlocal = %s\nremote = %s\nppp = /usr/sbin/pppd\n", port, name, name, firstUsableIP(pool), pool)
 		preview.Files["options.sstpd"] = fmt.Sprintf("require-mschap-v2\nms-dns %s\nproxyarp\nlock\nmtu 1400\nmru 1400\n", dns)
 		preview.Files["chap-secrets"] = "# client server secret ip\n[ENCRYPTED_SECRET_REF] sstpd [ENCRYPTED_SECRET_REF] *\n"
 	case models.ProtocolPPTP:

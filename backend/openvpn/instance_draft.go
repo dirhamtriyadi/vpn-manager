@@ -5,8 +5,8 @@ import (
 	"net"
 	"strings"
 
-	"github.com/example/wg-panel/models"
-	"github.com/example/wg-panel/secrets"
+	"github.com/example/vpn-manager/models"
+	"github.com/example/vpn-manager/secrets"
 )
 
 type InstanceDraftInput struct {

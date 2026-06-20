@@ -3,7 +3,7 @@ package vpn
 import (
 	"testing"
 
-	"github.com/example/wg-panel/models"
+	"github.com/example/vpn-manager/models"
 )
 
 func TestAllProtocolSpecsDefinesSupportedRoadmap(t *testing.T) {

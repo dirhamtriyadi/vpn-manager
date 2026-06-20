@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/example/wg-panel/models"
+	"github.com/example/vpn-manager/models"
 	"github.com/vishvananda/netlink"
 )
 

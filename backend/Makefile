@@ -4,7 +4,7 @@ run:
 	go run main.go
 
 build:
-	go build -o bin/go-api main.go
+	go build -o bin/vpn-manager main.go
 
 tidy:
 	go mod tidy

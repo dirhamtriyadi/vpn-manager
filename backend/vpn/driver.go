@@ -1,6 +1,6 @@
 package vpn
 
-import "github.com/example/wg-panel/models"
+import "github.com/example/vpn-manager/models"
 
 type InstanceStatus struct {
 	Protocol models.VPNProtocol `json:"protocol"`

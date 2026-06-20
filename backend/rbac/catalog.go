@@ -2,7 +2,7 @@
 // the seeding/bootstrap logic for the role-based access control system.
 package rbac
 
-import "github.com/example/wg-panel/models"
+import "github.com/example/vpn-manager/models"
 
 // Permission name constants. Names follow "<resource>.<action>". The wildcard
 // models.PermissionWildcard ("*") grants everything.

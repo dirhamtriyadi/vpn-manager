@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/example/wg-panel/secrets"
+	"github.com/example/vpn-manager/secrets"
 )
 
 func TestBuildInstanceDraftStoresSecretReferencesOnly(t *testing.T) {

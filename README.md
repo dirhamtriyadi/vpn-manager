@@ -190,7 +190,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=postgres
-DB_NAME=wg_panel
+DB_NAME=vpn_manager
 DB_SSLMODE=disable
 DEFAULT_ENDPOINT=192.168.10.10
 CORS_ALLOW_ORIGINS=http://localhost:5173
@@ -347,7 +347,7 @@ Backend:
 ```bash
 cd backend
 go test ./...
-go build -o wg-panel ./main.go
+go build -o vpn-manager ./main.go
 ```
 
 Frontend:
@@ -420,10 +420,10 @@ Panel menyediakan script RouterOS 7 untuk membuat MikroTik sebagai WireGuard cli
 Contoh hasil yang diharapkan:
 
 ```routeros
-/interface/wireguard/add name="wg-router" mtu=1420 private-key="..." comment="wg-panel wg-router"
-/ip/address/add address=10.8.0.2/32 interface="wg-router" comment="wg-panel wg-router"
-/interface/wireguard/peers/add interface="wg-router" public-key="..." endpoint-address=192.168.10.10 endpoint-port=51820 allowed-address=10.8.0.0/24 persistent-keepalive=25s comment="wg-panel wg-router" preshared-key="..."
-/ip/route/add dst-address=10.8.0.0/24 gateway="wg-router" comment="wg-panel wg-router"
+/interface/wireguard/add name="wg-router" mtu=1420 private-key="..." comment="vpn-manager wg-router"
+/ip/address/add address=10.8.0.2/32 interface="wg-router" comment="vpn-manager wg-router"
+/interface/wireguard/peers/add interface="wg-router" public-key="..." endpoint-address=192.168.10.10 endpoint-port=51820 allowed-address=10.8.0.0/24 persistent-keepalive=25s comment="vpn-manager wg-router" preshared-key="..."
+/ip/route/add dst-address=10.8.0.0/24 gateway="wg-router" comment="vpn-manager wg-router"
 /ping 10.8.0.1 count=5
 ```
 

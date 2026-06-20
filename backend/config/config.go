@@ -42,7 +42,7 @@ func Load() *Config {
 		DBPort:           getEnv("DB_PORT", "5432"),
 		DBUser:           getEnv("DB_USER", "postgres"),
 		DBPassword:       getEnv("DB_PASSWORD", "postgres"),
-		DBName:           getEnv("DB_NAME", "go_api"),
+		DBName:           getEnv("DB_NAME", "vpn_manager"),
 		DBSSLMode:        getEnv("DB_SSLMODE", "disable"),
 		CORSAllowOrigins: getEnv("CORS_ALLOW_ORIGINS", "*"),
 		DefaultEndpoint:  getEnv("DEFAULT_ENDPOINT", ""),

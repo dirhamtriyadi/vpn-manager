@@ -1,4 +1,4 @@
-module github.com/example/wg-panel
+module github.com/example/vpn-manager
 
 go 1.22
 

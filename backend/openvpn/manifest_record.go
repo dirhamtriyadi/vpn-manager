@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/example/wg-panel/models"
+	"github.com/example/vpn-manager/models"
 )
 
 func BuildRuntimeManifestRecord(instance models.OpenVPNInstance) (models.OpenVPNRuntimeManifest, error) {

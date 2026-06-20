@@ -3,7 +3,7 @@ package vpn
 import (
 	"fmt"
 
-	"github.com/example/wg-panel/models"
+	"github.com/example/vpn-manager/models"
 )
 
 type ProtocolRoadmap struct {
@@ -100,7 +100,7 @@ func BuildProtocolServicePlan(protocol models.VPNProtocol) (ProtocolServicePlan,
 	case models.ProtocolSSTP:
 		plan.Components = []string{"sstpd server", "TLS certificate/key secret refs", "ppp users/secrets", "iptables NAT/FORWARD ownership"}
 		plan.RuntimePlan = []string{"render sstpd config", "mount TLS certificate/key from encrypted secret material", "systemctl restart sstpd or docker compose up -d"}
-		plan.FirewallPlan = []string{"allow TCP 443 or selected SSTP port", "iptables MASQUERADE for SSTP pool", "track rules with wg-panel SSTP ownership comments"}
+		plan.FirewallPlan = []string{"allow TCP 443 or selected SSTP port", "iptables MASQUERADE for SSTP pool", "track rules with vpn-manager SSTP ownership comments"}
 		plan.UserPlan = []string{"store PPP credentials as encrypted secrets", "generate Windows/macOS setup notes"}
 	case models.ProtocolPPTP:
 		plan.Components = []string{"pptpd legacy/insecure daemon", "ppp chap-secrets", "GRE protocol handling", "iptables NAT/FORWARD ownership"}
@@ -111,7 +111,7 @@ func BuildProtocolServicePlan(protocol models.VPNProtocol) (ProtocolServicePlan,
 	case models.ProtocolOpenVPN:
 		plan.Components = []string{"OpenVPN container", "CA/server/client certificate secret refs", "persisted server.conf/docker-compose.yml", "iptables NAT/FORWARD ownership"}
 		plan.RuntimePlan = []string{"write persisted manifest files to host runtime directory", "docker compose up -d", "parse OpenVPN status log"}
-		plan.FirewallPlan = []string{"allow OpenVPN listen port", "iptables MASQUERADE for tunnel CIDR", "track rules with wg-panel OpenVPN ownership comments"}
+		plan.FirewallPlan = []string{"allow OpenVPN listen port", "iptables MASQUERADE for tunnel CIDR", "track rules with vpn-manager OpenVPN ownership comments"}
 		plan.UserPlan = []string{"store client certificate/key as encrypted secrets", "generate .ovpn client profiles"}
 	case models.ProtocolWireGuard:
 		plan.Components = []string{"host WireGuard kernel module", "wgctrl netlink", "existing interface/peer workflow"}

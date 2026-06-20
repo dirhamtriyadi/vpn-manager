@@ -5,8 +5,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/example/wg-panel/models"
-	"github.com/example/wg-panel/security"
+	"github.com/example/vpn-manager/models"
+	"github.com/example/vpn-manager/security"
 	"gorm.io/gorm"
 )
 

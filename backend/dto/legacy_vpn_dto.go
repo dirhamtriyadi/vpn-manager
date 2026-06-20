@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/example/wg-panel/models"
+import "github.com/example/vpn-manager/models"
 
 type ProtocolConfigPreviewRequest struct {
 	Protocol   models.VPNProtocol `json:"protocol" validate:"required,oneof=l2tp_ipsec sstp pptp"`

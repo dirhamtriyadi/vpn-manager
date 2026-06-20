@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/example/wg-panel/models"
+	"github.com/example/vpn-manager/models"
 	"github.com/vishvananda/netlink"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"

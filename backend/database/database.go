@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/example/wg-panel/config"
-	"github.com/example/wg-panel/models"
+	"github.com/example/vpn-manager/config"
+	"github.com/example/vpn-manager/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"

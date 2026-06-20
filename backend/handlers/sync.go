@@ -3,9 +3,9 @@ package handlers
 import (
 	"fmt"
 
-	"github.com/example/wg-panel/database"
-	"github.com/example/wg-panel/models"
-	"github.com/example/wg-panel/wg"
+	"github.com/example/vpn-manager/database"
+	"github.com/example/vpn-manager/models"
+	"github.com/example/vpn-manager/wg"
 )
 
 // reconcile applies the desired state of an interface (and its enabled peers)

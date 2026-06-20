@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/example/wg-panel/models"
+	"github.com/example/vpn-manager/models"
 )
 
 func TestBuildProtocolRoadmapRequiresExecutionEnabled(t *testing.T) {

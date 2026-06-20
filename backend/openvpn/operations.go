@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/example/wg-panel/models"
-	"github.com/example/wg-panel/secrets"
+	"github.com/example/vpn-manager/models"
+	"github.com/example/vpn-manager/secrets"
 )
 
 type LifecyclePlan struct {
@@ -91,7 +91,7 @@ func BuildLifecyclePlan(instance models.OpenVPNInstance, action string) (Lifecyc
 		return LifecyclePlan{}, fmt.Errorf("instance name is required")
 	}
 	project := "vpn-manager-openvpn-" + name
-	base := fmt.Sprintf("docker compose -p %s -f /var/lib/wg-panel/openvpn/%d/docker-compose.yml", project, instance.ID)
+	base := fmt.Sprintf("docker compose -p %s -f /var/lib/vpn-manager/openvpn/%d/docker-compose.yml", project, instance.ID)
 	commands := map[string][]string{
 		"start":   {base + " up -d"},
 		"stop":    {base + " down"},
@@ -122,7 +122,7 @@ func BuildFirewallPlan(instance models.OpenVPNInstance) (FirewallPlan, error) {
 		return FirewallPlan{}, fmt.Errorf("tunnel cidr must be a valid CIDR")
 	}
 	name := sanitizeInstanceName(instance.Name)
-	comment := "wg-panel openvpn " + name
+	comment := "vpn-manager openvpn " + name
 	cidr := ipNet.String()
 	return FirewallPlan{
 		Status:       "planned",

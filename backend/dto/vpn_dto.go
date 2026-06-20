@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/example/wg-panel/models"
+import "github.com/example/vpn-manager/models"
 
 type VPNProtocolResponse struct {
 	ID                   models.VPNProtocol `json:"id"`

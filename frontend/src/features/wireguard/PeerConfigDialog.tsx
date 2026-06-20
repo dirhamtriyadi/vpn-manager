@@ -82,21 +82,21 @@ function buildRouterOSScript(iface: WGInterface | null, peer: Peer, config: stri
 
   lines.push(
     `/interface/wireguard/remove [find name="${quoteRouterOS(name)}"]`,
-    `/interface/wireguard/add name="${quoteRouterOS(name)}" mtu=${mtu} private-key="${quoteRouterOS(privateKey || "CHANGE_ME_PRIVATE_KEY")}" comment="wg-panel ${quoteRouterOS(name)}"`,
+    `/interface/wireguard/add name="${quoteRouterOS(name)}" mtu=${mtu} private-key="${quoteRouterOS(privateKey || "CHANGE_ME_PRIVATE_KEY")}" comment="vpn-manager ${quoteRouterOS(name)}"`,
     `/ip/address/remove [find interface="${quoteRouterOS(name)}"]`,
-    `/ip/address/add address=${address} interface="${quoteRouterOS(name)}" comment="wg-panel ${quoteRouterOS(name)}"`,
+    `/ip/address/add address=${address} interface="${quoteRouterOS(name)}" comment="vpn-manager ${quoteRouterOS(name)}"`,
     `/interface/wireguard/peers/remove [find interface="${quoteRouterOS(name)}"]`,
   )
 
-  let peerCmd = `/interface/wireguard/peers/add interface="${quoteRouterOS(name)}" public-key="${quoteRouterOS(serverPublicKey)}" endpoint-address=${endpoint} endpoint-port=${endpointPort} allowed-address=${allowedAddress} persistent-keepalive=${keepalive}s comment="wg-panel ${quoteRouterOS(name)}"`
+  let peerCmd = `/interface/wireguard/peers/add interface="${quoteRouterOS(name)}" public-key="${quoteRouterOS(serverPublicKey)}" endpoint-address=${endpoint} endpoint-port=${endpointPort} allowed-address=${allowedAddress} persistent-keepalive=${keepalive}s comment="vpn-manager ${quoteRouterOS(name)}"`
   if (presharedKey) {
     peerCmd += ` preshared-key="${quoteRouterOS(presharedKey)}"`
   }
   lines.push(peerCmd)
   if (ipv4Routes.length > 0) {
-    lines.push(`/ip/route/remove [find comment="wg-panel ${quoteRouterOS(name)}"]`)
+    lines.push(`/ip/route/remove [find comment="vpn-manager ${quoteRouterOS(name)}"]`)
     for (const route of ipv4Routes) {
-      lines.push(`/ip/route/add dst-address=${route} gateway="${quoteRouterOS(name)}" comment="wg-panel ${quoteRouterOS(name)}"`)
+      lines.push(`/ip/route/add dst-address=${route} gateway="${quoteRouterOS(name)}" comment="vpn-manager ${quoteRouterOS(name)}"`)
     }
   }
   lines.push(`/interface/wireguard/print detail where name="${quoteRouterOS(name)}"`)
@@ -111,13 +111,13 @@ function buildRouterOSTeardownScript(peer: Peer): string {
   return [
     `# RouterOS 7 teardown script for peer: ${peer.name}`,
     `# Use this ONLY when you want to remove the VPN client from this RouterOS router.`,
-    `# It deletes the WireGuard interface, its IP address, routes, and wg-panel firewall/NAT rules.`,
+    `# It deletes the WireGuard interface, its IP address, routes, and vpn-manager firewall/NAT rules.`,
     `# It does NOT delete the peer from WG Panel. Use the panel Delete/Trash button for that.`,
     `/ip/address/remove [find interface="${quoteRouterOS(name)}"]`,
     `/interface/wireguard/peers/remove [find interface="${quoteRouterOS(name)}"]`,
-    `/ip/route/remove [find comment="wg-panel ${quoteRouterOS(name)}"]`,
-    `/ip/firewall/nat/remove [find comment="wg-panel ${quoteRouterOS(name)}"]`,
-    `/ip/firewall/filter/remove [find comment="wg-panel ${quoteRouterOS(name)}"]`,
+    `/ip/route/remove [find comment="vpn-manager ${quoteRouterOS(name)}"]`,
+    `/ip/firewall/nat/remove [find comment="vpn-manager ${quoteRouterOS(name)}"]`,
+    `/ip/firewall/filter/remove [find comment="vpn-manager ${quoteRouterOS(name)}"]`,
     `/interface/wireguard/remove [find name="${quoteRouterOS(name)}"]`,
     `/interface/wireguard/print`,
   ].join("\n")

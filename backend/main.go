@@ -3,10 +3,10 @@ package main
 import (
 	"log"
 
-	"github.com/example/wg-panel/config"
-	"github.com/example/wg-panel/database"
-	"github.com/example/wg-panel/rbac"
-	"github.com/example/wg-panel/routes"
+	"github.com/example/vpn-manager/config"
+	"github.com/example/vpn-manager/database"
+	"github.com/example/vpn-manager/rbac"
+	"github.com/example/vpn-manager/routes"
 	"github.com/gin-gonic/gin"
 )
 
@@ -45,7 +45,7 @@ func main() {
 	r := routes.Setup(cfg)
 
 	addr := ":" + cfg.ServerPort
-	log.Printf("WireGuard panel listening on %s (swagger: http://localhost%s/swagger/index.html)", addr, addr)
+	log.Printf("VPN Manager listening on %s (swagger: http://localhost%s/swagger/index.html)", addr, addr)
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}

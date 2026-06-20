@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/example/wg-panel/dto"
+	"github.com/example/vpn-manager/dto"
 	"github.com/go-playground/validator/v10"
 )
 

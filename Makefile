@@ -65,7 +65,7 @@ backend-test: ## Jalankan test backend
 	@cd $(BACKEND_DIR) && go test ./...
 
 backend-build: ## Build binary backend
-	@cd $(BACKEND_DIR) && go build -o wg-panel ./main.go
+	@cd $(BACKEND_DIR) && go build -o vpn-manager ./main.go
 
 backend-tidy: ## Jalankan go mod tidy
 	@cd $(BACKEND_DIR) && go mod tidy
@@ -100,7 +100,7 @@ test: backend-test ## Jalankan test semua yang tersedia
 build: backend-build frontend-build ## Build backend dan frontend
 
 clean: ## Bersihkan artifact build umum
-	@rm -rf $(FRONTEND_DIR)/dist $(FRONTEND_DIR)/tsconfig.tsbuildinfo $(BACKEND_DIR)/wg-panel $(BACKEND_DIR)/bin
+	@rm -rf $(FRONTEND_DIR)/dist $(FRONTEND_DIR)/tsconfig.tsbuildinfo $(BACKEND_DIR)/vpn-manager $(BACKEND_DIR)/bin
 
 status: ## Tampilkan status command penting
 	@printf "go:      "; command -v go || true

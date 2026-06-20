@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/example/wg-panel/auth"
-	"github.com/example/wg-panel/database"
-	"github.com/example/wg-panel/dto"
-	"github.com/example/wg-panel/models"
+	"github.com/example/vpn-manager/auth"
+	"github.com/example/vpn-manager/database"
+	"github.com/example/vpn-manager/dto"
+	"github.com/example/vpn-manager/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )

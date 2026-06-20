@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: wg_panel
+      POSTGRES_DB: vpn_manager
     ports:
       - "5434:5432"
     volumes:
@@ -33,7 +33,7 @@ services:
       DB_PORT: 5434
       DB_USER: postgres
       DB_PASSWORD: postgres
-      DB_NAME: wg_panel
+      DB_NAME: vpn_manager
       DB_SSLMODE: disable
       DEFAULT_ENDPOINT: ${DEFAULT_ENDPOINT:-vpn.example.com}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:5173}

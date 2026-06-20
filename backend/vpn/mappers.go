@@ -1,8 +1,8 @@
 package vpn
 
 import (
-	"github.com/example/wg-panel/dto"
-	"github.com/example/wg-panel/models"
+	"github.com/example/vpn-manager/dto"
+	"github.com/example/vpn-manager/models"
 )
 
 func MapWGInterfaceToVPNInstance(iface models.WGInterface) dto.VPNInstanceResponse {

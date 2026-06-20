@@ -8,13 +8,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/example/wg-panel/database"
-	"github.com/example/wg-panel/dto"
-	"github.com/example/wg-panel/middleware"
-	"github.com/example/wg-panel/models"
-	"github.com/example/wg-panel/openvpn"
-	"github.com/example/wg-panel/runtimeexec"
-	"github.com/example/wg-panel/secrets"
+	"github.com/example/vpn-manager/database"
+	"github.com/example/vpn-manager/dto"
+	"github.com/example/vpn-manager/middleware"
+	"github.com/example/vpn-manager/models"
+	"github.com/example/vpn-manager/openvpn"
+	"github.com/example/vpn-manager/runtimeexec"
+	"github.com/example/vpn-manager/secrets"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -483,7 +483,7 @@ func vpnExecutionEnabled() bool {
 func runtimeRootDir() string {
 	root := strings.TrimSpace(os.Getenv("VPN_RUNTIME_ROOT"))
 	if root == "" {
-		return "/var/lib/wg-panel"
+		return "/var/lib/vpn-manager"
 	}
 	return root
 }

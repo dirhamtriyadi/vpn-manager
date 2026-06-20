@@ -6,12 +6,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/example/wg-panel/database"
-	"github.com/example/wg-panel/dto"
-	"github.com/example/wg-panel/middleware"
-	"github.com/example/wg-panel/models"
-	"github.com/example/wg-panel/rbac"
-	"github.com/example/wg-panel/security"
+	"github.com/example/vpn-manager/database"
+	"github.com/example/vpn-manager/dto"
+	"github.com/example/vpn-manager/middleware"
+	"github.com/example/vpn-manager/models"
+	"github.com/example/vpn-manager/rbac"
+	"github.com/example/vpn-manager/security"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )

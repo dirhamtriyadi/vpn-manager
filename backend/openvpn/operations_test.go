@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/example/wg-panel/models"
-	"github.com/example/wg-panel/secrets"
+	"github.com/example/vpn-manager/models"
+	"github.com/example/vpn-manager/secrets"
 )
 
 func testInstance() models.OpenVPNInstance {
@@ -39,10 +39,10 @@ func TestBuildFirewallPlanIncludesApplyAndTeardownRules(t *testing.T) {
 	}
 	joined := strings.Join(plan.Rules, "\n")
 	teardown := strings.Join(plan.TeardownRules, "\n")
-	if !strings.Contains(joined, "10.20.0.0/24") || !strings.Contains(joined, "wg-panel openvpn office-vpn") {
+	if !strings.Contains(joined, "10.20.0.0/24") || !strings.Contains(joined, "vpn-manager openvpn office-vpn") {
 		t.Fatalf("rules missing CIDR/comment: %s", joined)
 	}
-	if !strings.Contains(teardown, "wg-panel openvpn office-vpn") {
+	if !strings.Contains(teardown, "vpn-manager openvpn office-vpn") {
 		t.Fatalf("teardown missing ownership comment: %s", teardown)
 	}
 }
