@@ -5,8 +5,12 @@ services:
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
       POSTGRES_DB: ${DB_NAME:-vpn_manager}
+    # Bind Postgres to loopback ONLY. The API uses host networking and reaches it
+    # on 127.0.0.1, so the DB must NOT be published on 0.0.0.0 (that exposes it to
+    # the internet on a public VPS — a default-password Postgres gets brute-forced
+    # and RCE'd within minutes). Override DB_BIND only if you really need remote DB.
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${DB_BIND:-127.0.0.1}:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -30,7 +34,9 @@ services:
       SERVER_PORT: ${SERVER_PORT:-8080}
       GIN_MODE: ${GIN_MODE:-release}
       # With host networking the API reaches Postgres on the host's published port.
-      DB_HOST: ${DB_HOST:-localhost}
+      # Use 127.0.0.1 (IPv4) — "localhost" can resolve to ::1 and fail with
+      # "cannot assign requested address".
+      DB_HOST: ${DB_HOST:-127.0.0.1}
       DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
