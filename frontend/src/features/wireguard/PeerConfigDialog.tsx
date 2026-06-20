@@ -132,26 +132,20 @@ function buildRouterOSScript(iface: WGInterface | null, peer: Peer, config: stri
   }
 
   if (wantsFullTunnel) {
+    // Full tunnel is OPT-IN: emitted as comments so pasting the script does a
+    // safe split tunnel (VPN subnet only). Routing 0.0.0.0/0 without pinning the
+    // endpoint to the real uplink loops the encrypted traffic back into the
+    // tunnel and breaks the router, so the user must set WAN_GATEWAY first.
+    const endpointPin = isIPv4(endpoint) ? `${endpoint}/32` : "<endpoint-ip>/32"
     lines.push(
-      `# --- FULL TUNNEL (route ALL traffic through WireGuard) ---`,
-      `# Pin the WireGuard endpoint to your normal uplink first, or the encrypted`,
-      `# handshake loops back into the tunnel and never connects (rx stays 0).`,
-      `# Find your WAN gateway with:  /ip route print where dst-address=0.0.0.0/0 active=yes`,
-    )
-    if (isIPv4(endpoint)) {
-      lines.push(
-        `/ip/route/add dst-address=${endpoint}/32 gateway=YOUR_WAN_GATEWAY comment="vpn-manager ${quoteRouterOS(name)} endpoint"`,
-      )
-    } else {
-      lines.push(
-        `# Endpoint is a hostname; resolve it and pin its IP, e.g.:`,
-        `# /ip/route/add dst-address=<endpoint-ip>/32 gateway=YOUR_WAN_GATEWAY comment="vpn-manager ${quoteRouterOS(name)} endpoint"`,
-      )
-    }
-    lines.push(
-      `/ip/route/add dst-address=0.0.0.0/0 gateway="${quoteRouterOS(name)}" comment="vpn-manager ${quoteRouterOS(name)}"`,
-      `# Masquerade so this router's LAN clients can use the tunnel:`,
-      `/ip/firewall/nat/add chain=srcnat out-interface="${quoteRouterOS(name)}" action=masquerade comment="vpn-manager ${quoteRouterOS(name)}"`,
+      `# --- OPTIONAL: FULL TUNNEL (route ALL traffic through WireGuard) ---`,
+      `# The route above already covers the VPN subnet. To send EVERYTHING through`,
+      `# the tunnel, first replace WAN_GATEWAY with your uplink gateway:`,
+      `#   /ip route print where dst-address=0.0.0.0/0 active=yes`,
+      `# then uncomment and run these (the endpoint pin keeps the handshake alive):`,
+      `# /ip/route/add dst-address=${endpointPin} gateway=WAN_GATEWAY comment="vpn-manager ${quoteRouterOS(name)} endpoint"`,
+      `# /ip/route/add dst-address=0.0.0.0/0 gateway="${quoteRouterOS(name)}" comment="vpn-manager ${quoteRouterOS(name)}"`,
+      `# /ip/firewall/nat/add chain=srcnat out-interface="${quoteRouterOS(name)}" action=masquerade comment="vpn-manager ${quoteRouterOS(name)}"`,
     )
   }
   lines.push(`/interface/wireguard/print detail where name="${quoteRouterOS(name)}"`)
