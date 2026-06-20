@@ -62,9 +62,13 @@ export interface ListParams {
 
 export interface ApiResponse<T> {
   success: boolean
+  code?: string
   message: string
   data: T
   meta?: PaginationMeta
+  // Set when the primary operation succeeded but a secondary best-effort step
+  // (kernel reconcile, device cleanup, runtime apply) degraded.
+  warning?: string
 }
 
 export interface PaginatedResult<T> {

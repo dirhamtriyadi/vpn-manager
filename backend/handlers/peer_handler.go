@@ -33,6 +33,9 @@ func (h *PeerHandler) List(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if _, ok := getOwnedInterface(c, ifaceID); !ok {
+		return
+	}
 	allowedSorts := map[string]string{
 		"id":          "id",
 		"name":        "name",
@@ -80,6 +83,10 @@ func (h *PeerHandler) Create(c *gin.Context) {
 
 	var iface models.WGInterface
 	if err := database.DB.Preload("Peers").First(&iface, ifaceID).Error; err != nil {
+		respondInterfaceLookupError(c, err)
+		return
+	}
+	if !ownsResource(c, iface.OwnerID) {
 		dto.Error(c, http.StatusNotFound, "interface not found")
 		return
 	}
@@ -154,21 +161,28 @@ func (h *PeerHandler) Create(c *gin.Context) {
 		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	if err := ensurePeerUnique(peer); err != nil {
-		dto.Error(c, http.StatusConflict, err.Error())
+	if conflict, err := ensurePeerUnique(peer); err != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to check peer uniqueness")
+		return
+	} else if conflict != "" {
+		dto.Error(c, http.StatusConflict, conflict)
 		return
 	}
 
 	if err := database.DB.Create(&peer).Error; err != nil {
-		dto.Error(c, http.StatusInternalServerError, "failed to create peer (public key or IP may already exist)")
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			dto.Error(c, http.StatusConflict, "peer public key or assigned IP already in use")
+			return
+		}
+		dto.Error(c, http.StatusInternalServerError, "failed to create peer")
 		return
 	}
 
-	msg := "peer created"
 	if err := syncPeer(iface.ID, peer, false); err != nil {
-		msg = "peer saved but not applied to kernel: " + err.Error()
+		dto.CreatedWarn(c, "peer created", peer, "not applied to kernel: "+err.Error())
+		return
 	}
-	dto.Created(c, msg, peer)
+	dto.Created(c, "peer created", peer)
 }
 
 // Update godoc
@@ -184,6 +198,9 @@ func (h *PeerHandler) Create(c *gin.Context) {
 func (h *PeerHandler) Update(c *gin.Context) {
 	peer, err := findPeer(c)
 	if err != nil {
+		return
+	}
+	if !assertPeerOwned(c, peer) {
 		return
 	}
 
@@ -211,15 +228,19 @@ func (h *PeerHandler) Update(c *gin.Context) {
 	}
 
 	if err := database.DB.Save(peer).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			dto.Error(c, http.StatusConflict, "peer public key or assigned IP already in use")
+			return
+		}
 		dto.Error(c, http.StatusInternalServerError, "failed to update peer")
 		return
 	}
 
-	msg := "peer updated"
 	if err := syncPeer(peer.InterfaceID, *peer, false); err != nil {
-		msg = "peer saved but not applied to kernel: " + err.Error()
+		dto.OKWarn(c, "peer updated", peer, "not applied to kernel: "+err.Error())
+		return
 	}
-	dto.OK(c, msg, peer)
+	dto.OK(c, "peer updated", peer)
 }
 
 // Delete godoc
@@ -235,17 +256,20 @@ func (h *PeerHandler) Delete(c *gin.Context) {
 	if err != nil {
 		return
 	}
+	if !assertPeerOwned(c, peer) {
+		return
+	}
 	ifaceID := peer.InterfaceID
 	peerSnapshot := *peer
 	if err := database.DB.Delete(peer).Error; err != nil {
 		dto.Error(c, http.StatusInternalServerError, "failed to move peer to trash")
 		return
 	}
-	msg := "peer moved to trash"
 	if err := syncPeer(ifaceID, peerSnapshot, true); err != nil {
-		msg = "peer moved to trash but kernel not updated: " + err.Error()
+		dto.NoDataWarn(c, "peer moved to trash", "kernel not updated: "+err.Error())
+		return
 	}
-	dto.NoData(c, http.StatusOK, msg)
+	dto.NoData(c, http.StatusOK, "peer moved to trash")
 }
 
 func (h *PeerHandler) Trash(c *gin.Context) {
@@ -262,7 +286,7 @@ func (h *PeerHandler) Trash(c *gin.Context) {
 	if c.Query("sort_order") == "" {
 		list.SortOrder = "desc"
 	}
-	query := database.DB.Unscoped().Model(&models.Peer{}).Where("deleted_at IS NOT NULL")
+	query := scopeOwnedPeers(c, database.DB.Unscoped().Model(&models.Peer{}).Where("deleted_at IS NOT NULL"))
 	if list.Search != "" {
 		like := "%" + list.Search + "%"
 		query = query.Where("name LIKE ? OR assigned_ip LIKE ? OR allowed_ips LIKE ?", like, like, like)
@@ -286,24 +310,31 @@ func (h *PeerHandler) Restore(c *gin.Context) {
 	if err != nil {
 		return
 	}
+	if !assertPeerOwned(c, peer) {
+		return
+	}
 	if !peer.DeletedAt.Valid {
 		dto.OK(c, "peer already active", peer)
 		return
 	}
 	var iface models.WGInterface
 	if err := database.DB.First(&iface, peer.InterfaceID).Error; err != nil {
-		dto.Error(c, http.StatusConflict, "restore the parent interface before restoring this peer")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			dto.Error(c, http.StatusConflict, "restore the parent interface before restoring this peer")
+			return
+		}
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch parent interface")
 		return
 	}
 	if err := database.DB.Unscoped().Model(peer).Update("deleted_at", nil).Error; err != nil {
 		dto.Error(c, http.StatusInternalServerError, "failed to restore peer")
 		return
 	}
-	msg := "peer restored"
 	if err := syncPeer(peer.InterfaceID, *peer, false); err != nil {
-		msg = "peer restored but kernel not updated: " + err.Error()
+		dto.OKWarn(c, "peer restored", peer, "kernel not updated: "+err.Error())
+		return
 	}
-	dto.OK(c, msg, peer)
+	dto.OK(c, "peer restored", peer)
 }
 
 func (h *PeerHandler) Purge(c *gin.Context) {
@@ -311,16 +342,19 @@ func (h *PeerHandler) Purge(c *gin.Context) {
 	if err != nil {
 		return
 	}
+	if !assertPeerOwned(c, peer) {
+		return
+	}
 	peerSnapshot := *peer
 	if err := database.DB.Unscoped().Delete(peer).Error; err != nil {
 		dto.Error(c, http.StatusInternalServerError, "failed to permanently delete peer")
 		return
 	}
-	msg := "peer permanently deleted"
 	if err := syncPeer(peerSnapshot.InterfaceID, peerSnapshot, true); err != nil {
-		msg = "peer permanently deleted but kernel not updated: " + err.Error()
+		dto.NoDataWarn(c, "peer permanently deleted", "kernel not updated: "+err.Error())
+		return
 	}
-	dto.NoData(c, http.StatusOK, msg)
+	dto.NoData(c, http.StatusOK, "peer permanently deleted")
 }
 
 // Config godoc
@@ -337,9 +371,12 @@ func (h *PeerHandler) Config(c *gin.Context) {
 	if err != nil {
 		return
 	}
+	if !assertPeerOwned(c, peer) {
+		return
+	}
 	var iface models.WGInterface
 	if err := database.DB.First(&iface, peer.InterfaceID).Error; err != nil {
-		dto.Error(c, http.StatusNotFound, "interface not found")
+		respondInterfaceLookupError(c, err)
 		return
 	}
 	cfg := wg.BuildClientConfig(&iface, peer)
@@ -361,9 +398,12 @@ func (h *PeerHandler) QRCode(c *gin.Context) {
 	if err != nil {
 		return
 	}
+	if !assertPeerOwned(c, peer) {
+		return
+	}
 	var iface models.WGInterface
 	if err := database.DB.First(&iface, peer.InterfaceID).Error; err != nil {
-		dto.Error(c, http.StatusNotFound, "interface not found")
+		respondInterfaceLookupError(c, err)
 		return
 	}
 	cfg := wg.BuildClientConfig(&iface, peer)
@@ -404,27 +444,41 @@ func findPeerWithScope(c *gin.Context, db *gorm.DB) (*models.Peer, error) {
 	return &peer, nil
 }
 
-func ensurePeerUnique(peer models.Peer) error {
+// respondInterfaceLookupError answers 404 for a missing interface and 500 for a
+// genuine database failure, instead of mislabelling every error as not-found.
+func respondInterfaceLookupError(c *gin.Context, err error) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		dto.Error(c, http.StatusNotFound, "interface not found")
+		return
+	}
+	dto.Error(c, http.StatusInternalServerError, "failed to fetch interface")
+}
+
+// ensurePeerUnique returns a human-readable conflict message when the peer's
+// public key or assigned IP is already taken (a 409), or a non-nil error for a
+// genuine DB failure (a 500). An empty message with nil error means it is unique.
+// This keeps a real query failure from masquerading as a duplicate conflict.
+func ensurePeerUnique(peer models.Peer) (string, error) {
 	var count int64
 	if err := database.DB.Unscoped().Model(&models.Peer{}).
 		Where("public_key = ?", peer.PublicKey).
 		Count(&count).Error; err != nil {
-		return errors.New("failed to check duplicate public key")
+		return "", err
 	}
 	if count > 0 {
-		return errors.New("peer public key already exists")
+		return "peer public key already exists", nil
 	}
 
 	count = 0
 	if err := database.DB.Unscoped().Model(&models.Peer{}).
 		Where("interface_id = ? AND assigned_ip = ?", peer.InterfaceID, peer.AssignedIP).
 		Count(&count).Error; err != nil {
-		return errors.New("failed to check duplicate assigned IP")
+		return "", err
 	}
 	if count > 0 {
-		return errors.New("assigned IP already exists on this interface")
+		return "assigned IP already exists on this interface", nil
 	}
-	return nil
+	return "", nil
 }
 
 func defaultString(v, fallback string) string {

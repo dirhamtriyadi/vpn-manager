@@ -26,12 +26,19 @@ func Connect(cfg *config.Config) {
 		gormLogger = logger.Default.LogMode(logger.Silent)
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: gormLogger})
+	// TranslateError maps driver-specific errors (e.g. Postgres SQLSTATE 23505)
+	// onto GORM's portable sentinels like gorm.ErrDuplicatedKey, so handlers can
+	// detect a unique-constraint violation with errors.Is and answer 409 instead
+	// of leaking a 500.
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: gormLogger, TranslateError: true})
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 
 	if err := db.AutoMigrate(
+		&models.User{},
+		&models.Role{},
+		&models.Permission{},
 		&models.WGInterface{},
 		&models.Peer{},
 		&models.OpenVPNInstance{},

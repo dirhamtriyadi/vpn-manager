@@ -133,17 +133,18 @@ func replaceRuntimePlaceholders(commands []string, input ProtocolConfigInput, in
 	return out
 }
 
-func BuildLegacyRuntimeApplyPlan(input ProtocolConfigInput, instanceID uint, gates ProductionGates, executorEnabled bool) (map[string]string, []string, error) {
+// BuildLegacyRuntimeApplyPlan renders the host config files plus the firewall and
+// runtime provisioning commands for a legacy-protocol instance. It does not gate
+// execution itself: the single VPN_EXECUTION_ENABLED toggle is enforced by
+// runtimeexec.Apply when the plan is actually written/run.
+func BuildLegacyRuntimeApplyPlan(input ProtocolConfigInput, instanceID uint) (map[string]string, []string, error) {
 	preview, err := BuildProtocolConfigPreview(input)
 	if err != nil {
 		return nil, nil, err
 	}
-	prod, err := BuildProductionPlan(input.Protocol, gates, executorEnabled)
+	prod, err := BuildProductionPlan(input.Protocol, true)
 	if err != nil {
 		return nil, nil, err
-	}
-	if !prod.Ready || !executorEnabled {
-		return nil, nil, fmt.Errorf("production gates and VPN_COMMAND_EXECUTOR_ENABLED must be enabled before applying %s", input.Protocol)
 	}
 	files := map[string]string{}
 	switch input.Protocol {

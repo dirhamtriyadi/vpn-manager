@@ -2,34 +2,34 @@ package runtimeexec
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestExecutorRefusesApplyWithoutAllGates(t *testing.T) {
+func TestExecutorRefusesApplyWhenExecutionDisabled(t *testing.T) {
 	plan := ApplyPlan{Files: map[string]string{"server.conf": "dev tun\n"}, Commands: []string{"true"}}
-	result, err := Apply(context.Background(), Options{RootDir: t.TempDir(), Gates: Gates{RuntimeExecution: true, FirewallApply: false, HostVerification: true}, ExecutorEnabled: true}, plan)
-	if err == nil || !strings.Contains(err.Error(), "VPN_FIREWALL_APPLY_ENABLED") {
-		t.Fatalf("expected firewall gate error, got result=%#v err=%v", result, err)
+	result, err := Apply(context.Background(), Options{RootDir: t.TempDir(), ExecutionEnabled: false}, plan)
+	if !errors.Is(err, ErrExecutionDisabled) {
+		t.Fatalf("expected ErrExecutionDisabled, got result=%#v err=%v", result, err)
 	}
 }
 
-func TestExecutorWritesFilesAndRunsCommandsWhenGated(t *testing.T) {
+func TestExecutorWritesFilesAndRunsCommandsWhenEnabled(t *testing.T) {
 	root := t.TempDir()
 	runs := []string{}
 	plan := ApplyPlan{
 		Files: map[string]string{
-			"openvpn/1/server.conf":         "dev tun\n",
+			"openvpn/1/server.conf":        "dev tun\n",
 			"openvpn/1/docker-compose.yml": "services: {}\n",
 		},
 		Commands: []string{"docker compose ps", "iptables -S"},
 	}
 	result, err := Apply(context.Background(), Options{
-		RootDir:         root,
-		Gates:           Gates{RuntimeExecution: true, FirewallApply: true, HostVerification: true},
-		ExecutorEnabled: true,
+		RootDir:          root,
+		ExecutionEnabled: true,
 		Runner: func(ctx context.Context, command string) CommandResult {
 			runs = append(runs, command)
 			return CommandResult{Command: command, ExitCode: 0, Output: "ok"}
@@ -54,7 +54,7 @@ func TestExecutorWritesFilesAndRunsCommandsWhenGated(t *testing.T) {
 }
 
 func TestExecutorRejectsUnsafeFilePath(t *testing.T) {
-	_, err := Apply(context.Background(), Options{RootDir: t.TempDir(), Gates: Gates{RuntimeExecution: true, FirewallApply: true, HostVerification: true}, ExecutorEnabled: true}, ApplyPlan{Files: map[string]string{"../etc/passwd": "bad"}})
+	_, err := Apply(context.Background(), Options{RootDir: t.TempDir(), ExecutionEnabled: true}, ApplyPlan{Files: map[string]string{"../etc/passwd": "bad"}})
 	if err == nil || !strings.Contains(err.Error(), "unsafe file path") {
 		t.Fatalf("expected unsafe file path error, got %v", err)
 	}

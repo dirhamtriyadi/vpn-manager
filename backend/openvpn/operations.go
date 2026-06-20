@@ -64,18 +64,14 @@ type EnablementGates struct {
 	Blockers                []string `json:"blockers"`
 }
 
-func BuildEnablementGates(runtimeExecutionEnabled, firewallApplyEnabled, hostVerificationPassed bool) EnablementGates {
+// BuildEnablementGates reports whether OpenVPN apply will execute, driven by the
+// single VPN_EXECUTION_ENABLED toggle shared by every protocol.
+func BuildEnablementGates(executionEnabled bool) EnablementGates {
 	blockers := []string{}
-	if !runtimeExecutionEnabled {
-		blockers = append(blockers, "OPENVPN_RUNTIME_EXECUTION_ENABLED must be true before container commands can run")
+	if !executionEnabled {
+		blockers = append(blockers, "VPN_EXECUTION_ENABLED must be true before the API writes config and runs container/firewall commands")
 	}
-	if !firewallApplyEnabled {
-		blockers = append(blockers, "OPENVPN_FIREWALL_APPLY_ENABLED must be true before firewall rules can be applied")
-	}
-	if !hostVerificationPassed {
-		blockers = append(blockers, "OPENVPN_HOST_VERIFICATION_PASSED must be true after host-side go test/build and plan review")
-	}
-	return EnablementGates{Ready: len(blockers) == 0, RuntimeExecutionEnabled: runtimeExecutionEnabled, FirewallApplyEnabled: firewallApplyEnabled, HostVerificationPassed: hostVerificationPassed, Blockers: blockers}
+	return EnablementGates{Ready: executionEnabled, RuntimeExecutionEnabled: executionEnabled, FirewallApplyEnabled: executionEnabled, HostVerificationPassed: executionEnabled, Blockers: blockers}
 }
 
 func BuildLifecyclePlan(instance models.OpenVPNInstance, action string) (LifecyclePlan, error) {
@@ -105,14 +101,14 @@ func BuildLifecyclePlan(instance models.OpenVPNInstance, action string) (Lifecyc
 	}
 	return LifecyclePlan{
 		Action:        action,
-		ExecutionMode: "dry_run",
+		ExecutionMode: "host_apply",
 		Status:        "planned",
 		ProjectName:   project,
 		ContainerName: project,
 		Commands:      commands[action],
 		Warnings: []string{
-			"Lifecycle commands are planned only and not executed by the API yet.",
-			"Enable execution only after manifest files, secret material, firewall ownership, and status parsing are verified on the host.",
+			"These are the exact commands the apply endpoint runs; it executes them only when VPN_EXECUTION_ENABLED=true.",
+			"Verify manifest files, secret material, firewall ownership, and Docker availability on the host before enabling execution.",
 		},
 	}, nil
 }
@@ -140,7 +136,7 @@ func BuildFirewallPlan(instance models.OpenVPNInstance) (FirewallPlan, error) {
 			fmt.Sprintf("iptables-save | grep -v %q | iptables-restore", comment),
 		},
 		Warnings: []string{
-			"Firewall rules are planned only and not applied by the API yet.",
+			"These are the exact rules the apply endpoint installs; it applies them only when VPN_EXECUTION_ENABLED=true.",
 			"Review WAN/LAN interface selection before enabling automatic firewall ownership.",
 		},
 	}, nil

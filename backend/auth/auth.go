@@ -1,10 +1,10 @@
-// Package auth implements single-admin authentication for the panel.
+// Package auth issues and verifies stateless session tokens for the panel.
 //
-// Credentials live in the environment (AUTH_USERNAME / AUTH_PASSWORD) so they
-// can be set on first setup without a user store. A successful login returns a
-// stateless, HMAC-SHA256 signed token (JWT-like: payload.signature) that the
-// Auth middleware verifies on every protected request. No external JWT
-// dependency is required — the standard library covers signing and verifying.
+// Credentials are checked against the database (Argon2id) by the login handler;
+// this package only mints and validates a signed token whose subject is the
+// authenticated user's ID. The token is HMAC-SHA256 signed (JWT-like:
+// payload.signature) and verified by the Auth middleware on every protected
+// request, so no external JWT dependency is required.
 package auth
 
 import (
@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -26,26 +27,24 @@ var (
 	ErrExpiredToken = errors.New("token expired")
 )
 
-// Service authenticates the admin user and issues/verifies session tokens.
+// Service issues and verifies session tokens.
 type Service struct {
-	username string
-	password string
-	secret   []byte
-	ttl      time.Duration
+	secret []byte
+	ttl    time.Duration
 }
 
-// claims is the signed token payload.
+// claims is the signed token payload. Sub is the user ID as a decimal string.
 type claims struct {
 	Sub string `json:"sub"`
 	Iat int64  `json:"iat"`
 	Exp int64  `json:"exp"`
 }
 
-// NewService builds a Service from the configured credentials. An empty secret
-// triggers an ephemeral random key (sessions then reset on restart); set
+// NewService builds a Service from the signing secret and token TTL. An empty
+// secret triggers an ephemeral random key (sessions reset on restart); set
 // AUTH_TOKEN_SECRET to keep tokens valid across restarts. A non-positive ttl
 // falls back to 24h.
-func NewService(username, password, secret string, ttl time.Duration) *Service {
+func NewService(secret string, ttl time.Duration) *Service {
 	key := []byte(secret)
 	if strings.TrimSpace(secret) == "" {
 		key = make([]byte, 32)
@@ -58,40 +57,16 @@ func NewService(username, password, secret string, ttl time.Duration) *Service {
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	if strings.TrimSpace(password) == "" {
-		log.Println("AUTH_PASSWORD is empty; login is disabled and the API is locked. Set AUTH_USERNAME and AUTH_PASSWORD to enable access.")
-	}
-	return &Service{
-		username: username,
-		password: password,
-		secret:   key,
-		ttl:      ttl,
-	}
-}
-
-// Enabled reports whether credentials are configured. When false, login fails
-// and protected routes are locked.
-func (s *Service) Enabled() bool {
-	return s.username != "" && s.password != ""
+	return &Service{secret: key, ttl: ttl}
 }
 
 // TTL is the lifetime of issued tokens.
 func (s *Service) TTL() time.Duration { return s.ttl }
 
-// Authenticate compares the supplied credentials in constant time.
-func (s *Service) Authenticate(username, password string) bool {
-	if !s.Enabled() {
-		return false
-	}
-	userOK := subtle.ConstantTimeCompare([]byte(username), []byte(s.username)) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(password), []byte(s.password)) == 1
-	return userOK && passOK
-}
-
-// Issue returns a signed token and its expiry, computed from now.
-func (s *Service) Issue(now time.Time) (token string, expiresAt time.Time, err error) {
+// Issue returns a signed token (subject = userID) and its expiry from now.
+func (s *Service) Issue(userID uint, now time.Time) (token string, expiresAt time.Time, err error) {
 	expiresAt = now.Add(s.ttl)
-	body, err := json.Marshal(claims{Sub: s.username, Iat: now.Unix(), Exp: expiresAt.Unix()})
+	body, err := json.Marshal(claims{Sub: strconv.FormatUint(uint64(userID), 10), Iat: now.Unix(), Exp: expiresAt.Unix()})
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -99,28 +74,32 @@ func (s *Service) Issue(now time.Time) (token string, expiresAt time.Time, err e
 	return payload + "." + s.sign(payload), expiresAt, nil
 }
 
-// Validate verifies the token signature and expiry, returning the subject.
-func (s *Service) Validate(token string, now time.Time) (string, error) {
+// Validate verifies the token signature and expiry, returning the user ID.
+func (s *Service) Validate(token string, now time.Time) (uint, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", ErrInvalidToken
+		return 0, ErrInvalidToken
 	}
 	expected := s.sign(parts[0])
 	if subtle.ConstantTimeCompare([]byte(parts[1]), []byte(expected)) != 1 {
-		return "", ErrInvalidToken
+		return 0, ErrInvalidToken
 	}
 	body, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return "", ErrInvalidToken
+		return 0, ErrInvalidToken
 	}
 	var c claims
 	if err := json.Unmarshal(body, &c); err != nil {
-		return "", ErrInvalidToken
+		return 0, ErrInvalidToken
 	}
 	if now.Unix() >= c.Exp {
-		return "", ErrExpiredToken
+		return 0, ErrExpiredToken
 	}
-	return c.Sub, nil
+	id, err := strconv.ParseUint(c.Sub, 10, 64)
+	if err != nil || id == 0 {
+		return 0, ErrInvalidToken
+	}
+	return uint(id), nil
 }
 
 func (s *Service) sign(payload string) string {

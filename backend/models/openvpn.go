@@ -25,6 +25,9 @@ type OpenVPNInstance struct {
 
 	Users []OpenVPNUser `json:"users,omitempty" gorm:"foreignKey:InstanceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
+	// OwnerID scopes the instance to a panel user (nil = unowned).
+	OwnerID *uint `json:"owner_id,omitempty" gorm:"index"`
+
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`

@@ -6,6 +6,15 @@ FRONTEND_DIR := frontend
 FRONTEND_HOST ?= 0.0.0.0
 FRONTEND_PORT ?= 5173
 
+# Use whichever Node package manager is installed (pnpm preferred, npm fallback)
+# so the frontend targets work regardless of the developer's setup. Override with
+# `make PKG=npm <target>`.
+PKG ?= $(shell command -v pnpm >/dev/null 2>&1 && echo pnpm || echo npm)
+# swag is installed by `go install` into $(go env GOPATH)/bin, which is often not
+# on PATH; resolve it explicitly and auto-install on demand.
+GOPATH_BIN := $(shell go env GOPATH)/bin
+SWAG_VERSION := v1.16.3
+
 .PHONY: help env install setup dev dev-db backend frontend db-up db-down docker-up docker-down docker-logs backend-run backend-test backend-build backend-tidy backend-swag frontend-dev frontend-install frontend-lint frontend-build frontend-preview lint test build clean status
 
 help: ## Tampilkan daftar command
@@ -24,7 +33,7 @@ dev: env ## Jalankan backend + frontend sekaligus dari root
 	@echo "Starting backend and frontend. Press Ctrl+C to stop both."
 	@set -e; \
 	(cd $(BACKEND_DIR) && go run main.go) & backend_pid=$$!; \
-	(cd $(FRONTEND_DIR) && npm run dev -- --host $(FRONTEND_HOST) --port $(FRONTEND_PORT)) & frontend_pid=$$!; \
+	(cd $(FRONTEND_DIR) && $(PKG) run dev -- --host $(FRONTEND_HOST) --port $(FRONTEND_PORT)) & frontend_pid=$$!; \
 	trap 'echo "Stopping..."; kill $$backend_pid $$frontend_pid 2>/dev/null || true; wait $$backend_pid $$frontend_pid 2>/dev/null || true' INT TERM EXIT; \
 	wait -n $$backend_pid $$frontend_pid
 
@@ -61,23 +70,28 @@ backend-build: ## Build binary backend
 backend-tidy: ## Jalankan go mod tidy
 	@cd $(BACKEND_DIR) && go mod tidy
 
-backend-swag: ## Generate Swagger docs backend
-	@cd $(BACKEND_DIR) && swag init -g main.go -o docs
+backend-swag: ## Generate Swagger docs backend (auto-install swag jika belum ada)
+	@if ! command -v swag >/dev/null 2>&1 && [ ! -x "$(GOPATH_BIN)/swag" ]; then \
+		echo "swag not found; installing $(SWAG_VERSION)..."; \
+		go install github.com/swaggo/swag/cmd/swag@$(SWAG_VERSION); \
+	fi; \
+	SWAG=$$(command -v swag || echo "$(GOPATH_BIN)/swag"); \
+	cd $(BACKEND_DIR) && "$$SWAG" init -g main.go -o docs
 
 frontend-dev: env ## Jalankan Vite dev server
-	@cd $(FRONTEND_DIR) && npm run dev -- --host $(FRONTEND_HOST) --port $(FRONTEND_PORT)
+	@cd $(FRONTEND_DIR) && $(PKG) run dev -- --host $(FRONTEND_HOST) --port $(FRONTEND_PORT)
 
-frontend-install: ## Install npm dependency frontend
-	@cd $(FRONTEND_DIR) && npm install
+frontend-install: ## Install dependency frontend ($(PKG))
+	@cd $(FRONTEND_DIR) && $(PKG) install
 
 frontend-lint: ## Type-check frontend
-	@cd $(FRONTEND_DIR) && npm run lint
+	@cd $(FRONTEND_DIR) && $(PKG) run lint
 
 frontend-build: ## Build frontend production
-	@cd $(FRONTEND_DIR) && npm run build
+	@cd $(FRONTEND_DIR) && $(PKG) run build
 
 frontend-preview: ## Preview hasil build frontend
-	@cd $(FRONTEND_DIR) && npm run preview -- --host $(FRONTEND_HOST) --port $(FRONTEND_PORT)
+	@cd $(FRONTEND_DIR) && $(PKG) run preview -- --host $(FRONTEND_HOST) --port $(FRONTEND_PORT)
 
 lint: frontend-lint ## Jalankan lint/type-check semua yang tersedia
 
@@ -89,7 +103,10 @@ clean: ## Bersihkan artifact build umum
 	@rm -rf $(FRONTEND_DIR)/dist $(FRONTEND_DIR)/tsconfig.tsbuildinfo $(BACKEND_DIR)/wg-panel $(BACKEND_DIR)/bin
 
 status: ## Tampilkan status command penting
-	@printf "go:     "; command -v go || true
-	@printf "npm:    "; command -v npm || true
-	@printf "docker: "; command -v docker || true
-	@printf "swag:   "; command -v swag || true
+	@printf "go:      "; command -v go || true
+	@printf "node:    "; command -v node || true
+	@printf "pnpm:    "; command -v pnpm || true
+	@printf "npm:     "; command -v npm || true
+	@printf "pkg mgr: %s\n" "$(PKG)"
+	@printf "docker:  "; command -v docker || true
+	@printf "swag:    "; command -v swag || ([ -x "$(GOPATH_BIN)/swag" ] && echo "$(GOPATH_BIN)/swag") || echo "(not installed; 'make backend-swag' installs it)"

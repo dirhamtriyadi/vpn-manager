@@ -7,23 +7,23 @@ import (
 	"github.com/example/wg-panel/models"
 )
 
-func TestBuildProtocolRoadmapRequiresExplicitExecutionGates(t *testing.T) {
-	roadmap, err := BuildProtocolRoadmap(models.ProtocolL2TPIPsec, false, false, false)
+func TestBuildProtocolRoadmapRequiresExecutionEnabled(t *testing.T) {
+	roadmap, err := BuildProtocolRoadmap(models.ProtocolL2TPIPsec, false)
 	if err != nil {
 		t.Fatalf("BuildProtocolRoadmap returned error: %v", err)
 	}
-	if roadmap.Available {
-		t.Fatal("L2TP/IPsec should not be available without explicit execution gates")
+	if !roadmap.Available {
+		t.Fatal("L2TP/IPsec is implemented and should report available")
 	}
 	if roadmap.EnablementReady {
-		t.Fatal("L2TP/IPsec should not be enablement-ready without host verification and apply gates")
+		t.Fatal("L2TP/IPsec should not be enablement-ready while VPN_EXECUTION_ENABLED is off")
 	}
-	if len(roadmap.EnablementBlockers) != 3 {
-		t.Fatalf("expected 3 blockers, got %d: %#v", len(roadmap.EnablementBlockers), roadmap.EnablementBlockers)
+	if len(roadmap.EnablementBlockers) != 1 {
+		t.Fatalf("expected 1 blocker, got %d: %#v", len(roadmap.EnablementBlockers), roadmap.EnablementBlockers)
 	}
 }
 
-func TestBuildProtocolServicePlansForAllRoadmapProtocols(t *testing.T) {
+func TestBuildProtocolServicePlansForAllProtocols(t *testing.T) {
 	tests := []struct {
 		protocol models.VPNProtocol
 		contains []string
@@ -37,8 +37,8 @@ func TestBuildProtocolServicePlansForAllRoadmapProtocols(t *testing.T) {
 		if err != nil {
 			t.Fatalf("BuildProtocolServicePlan(%s) returned error: %v", tt.protocol, err)
 		}
-		if plan.ExecutionMode != "dry_run" || plan.Status != "planned" {
-			t.Fatalf("expected dry-run planned service plan, got mode=%s status=%s", plan.ExecutionMode, plan.Status)
+		if plan.ExecutionMode != "host_apply" || plan.Status != "available" {
+			t.Fatalf("expected host_apply available service plan, got mode=%s status=%s", plan.ExecutionMode, plan.Status)
 		}
 		blob := strings.Join(append(append(plan.Components, plan.RuntimePlan...), plan.FirewallPlan...), "\n")
 		for _, want := range tt.contains {
@@ -49,18 +49,18 @@ func TestBuildProtocolServicePlansForAllRoadmapProtocols(t *testing.T) {
 	}
 }
 
-func TestBuildProtocolRoadmapReadyWhenAllGatesAreEnabled(t *testing.T) {
-	roadmap, err := BuildProtocolRoadmap(models.ProtocolSSTP, true, true, true)
+func TestBuildProtocolRoadmapReadyWhenExecutionEnabled(t *testing.T) {
+	roadmap, err := BuildProtocolRoadmap(models.ProtocolSSTP, true)
 	if err != nil {
 		t.Fatalf("BuildProtocolRoadmap returned error: %v", err)
 	}
 	if !roadmap.EnablementReady {
-		t.Fatal("expected enablement_ready when runtime, firewall, and host verification gates are true")
+		t.Fatal("expected enablement_ready when VPN_EXECUTION_ENABLED is true")
 	}
-	if roadmap.Available {
-		t.Fatal("roadmap protocol should still require a real registered driver before available=true")
+	if !roadmap.Available {
+		t.Fatal("expected available=true for an implemented protocol")
 	}
 	if len(roadmap.EnablementBlockers) != 0 {
-		t.Fatalf("expected no blockers when gates are enabled, got %#v", roadmap.EnablementBlockers)
+		t.Fatalf("expected no blockers when execution is enabled, got %#v", roadmap.EnablementBlockers)
 	}
 }

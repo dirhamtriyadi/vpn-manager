@@ -40,8 +40,8 @@ func TestAllProtocolSpecsDefinesSupportedRoadmap(t *testing.T) {
 	if !ok {
 		t.Fatal("expected PPTP spec")
 	}
-	if pptp.Status != ProtocolStatusLegacyRoadmap {
-		t.Fatalf("PPTP status = %s, want %s", pptp.Status, ProtocolStatusLegacyRoadmap)
+	if pptp.Status != ProtocolStatusLegacyAvailable {
+		t.Fatalf("PPTP status = %s, want %s", pptp.Status, ProtocolStatusLegacyAvailable)
 	}
 	if !pptp.LegacyInsecure {
 		t.Fatal("expected PPTP spec to be marked legacy/insecure")

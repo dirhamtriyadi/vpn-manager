@@ -26,27 +26,32 @@ func NewOpenVPNHandler() *OpenVPNHandler {
 }
 
 func (h *OpenVPNHandler) Roadmap(c *gin.Context) {
-	gates := openvpn.BuildEnablementGates(envFlag("OPENVPN_RUNTIME_EXECUTION_ENABLED"), envFlag("OPENVPN_FIREWALL_APPLY_ENABLED"), envFlag("OPENVPN_HOST_VERIFICATION_PASSED"))
+	gates := openvpn.BuildEnablementGates(vpnExecutionEnabled())
+	blockedMessage := "OpenVPN is available; applying an instance writes config and runs the container/firewall commands on the host."
+	if !gates.Ready {
+		blockedMessage = "OpenVPN is implemented; set VPN_EXECUTION_ENABLED=true so apply can write config and run the container/firewall commands."
+	}
 	dto.OK(c, "data fetched successfully", dto.OpenVPNRoadmapResponse{
-		Available:           false,
-		Status:              "roadmap",
-		RuntimeMode:         "container_openvpn_preview",
-		SecretStorageStatus: "encrypted_secret_scaffold",
-		ManifestStatus:      "persisted_manifest_scaffold",
-		LifecycleStatus:     "dry_run_lifecycle_scaffold",
-		StatusParserStatus:  "status_parser_scaffold",
-		FirewallStatus:      "firewall_plan_scaffold",
-		UserStorageStatus:   "encrypted_user_draft_scaffold",
+		Available:           true,
+		Status:              "available",
+		RuntimeMode:         "container_openvpn",
+		SecretStorageStatus: "encrypted_secret_store",
+		ManifestStatus:      "persisted_manifest",
+		LifecycleStatus:     "host_apply",
+		StatusParserStatus:  "status_parser",
+		FirewallStatus:      "firewall_apply",
+		UserStorageStatus:   "encrypted_user_store",
 		RuntimeExecution:    gateStatus(gates.RuntimeExecutionEnabled),
 		FirewallApply:       gateStatus(gates.FirewallApplyEnabled),
 		HostVerification:    gateStatus(gates.HostVerificationPassed),
 		EnablementReady:     gates.Ready,
 		EnablementBlockers:  gates.Blockers,
 		NextSteps: []string{
-			"run Go verification on host and review generated lifecycle/firewall plans",
-			"explicitly enable runtime execution after host/container policy is accepted",
+			"create an instance with CA/server certificate material and generate its runtime manifest",
+			"verify Docker availability and firewall ownership on the host",
+			"set VPN_EXECUTION_ENABLED=true, then apply the instance to start the container and firewall rules",
 		},
-		BlockedMessage: "OpenVPN scaffold is complete but remains unavailable until host-verified lifecycle execution and firewall application are explicitly enabled.",
+		BlockedMessage: blockedMessage,
 	})
 }
 
@@ -61,7 +66,7 @@ func (h *OpenVPNHandler) ListInstances(c *gin.Context) {
 		"updated_at":  "updated_at",
 	}
 	list := dto.ParseListQuery(c, allowedSorts, "id")
-	query := database.DB.Model(&models.OpenVPNInstance{})
+	query := scopeOwned(c, database.DB.Model(&models.OpenVPNInstance{}))
 	if list.Search != "" {
 		like := "%" + list.Search + "%"
 		query = query.Where("name LIKE ? OR remote_host LIKE ? OR tunnel_cidr LIKE ?", like, like, like)
@@ -98,7 +103,7 @@ func (h *OpenVPNHandler) CreateInstanceDraft(c *gin.Context) {
 
 	masterKey := strings.TrimSpace(os.Getenv("OPENVPN_SECRET_MASTER_KEY"))
 	if masterKey == "" {
-		dto.Error(c, http.StatusServiceUnavailable, "OPENVPN_SECRET_MASTER_KEY is required before saving OpenVPN certificate material")
+		dto.Error(c, http.StatusPreconditionFailed, "OPENVPN_SECRET_MASTER_KEY must be configured before saving OpenVPN certificate material")
 		return
 	}
 	envelope, err := secrets.NewEnvelope(masterKey)
@@ -120,26 +125,24 @@ func (h *OpenVPNHandler) CreateInstanceDraft(c *gin.Context) {
 		TLSCryptPEM:   req.TLSCryptPEM,
 	}, envelope)
 	if err != nil {
-		dto.Error(c, http.StatusBadRequest, err.Error())
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-
-	var deleted models.OpenVPNInstance
-	if err := database.DB.Unscoped().Where("name = ? AND deleted_at IS NOT NULL", draft.Instance.Name).First(&deleted).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		dto.Error(c, http.StatusInternalServerError, "failed to check deleted OpenVPN instances")
-		return
-	} else if err == nil {
-		dto.Error(c, http.StatusConflict, "OpenVPN instance name exists in trash; restore or permanently delete it first")
-		return
-	}
+	draft.Instance.OwnerID = currentOwnerID(c)
 
 	tx := database.DB.Begin()
 	if tx.Error != nil {
 		dto.Error(c, http.StatusInternalServerError, "failed to start transaction")
 		return
 	}
+	// The unique index on name is the single source of truth; a duplicate (active
+	// or trashed) surfaces as gorm.ErrDuplicatedKey, which we answer with 409.
 	if err := tx.Create(&draft.Instance).Error; err != nil {
 		tx.Rollback()
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			dto.Error(c, http.StatusConflict, conflictMessageForOpenVPNName(draft.Instance.Name))
+			return
+		}
 		dto.Error(c, http.StatusInternalServerError, "failed to create OpenVPN instance draft")
 		return
 	}
@@ -199,7 +202,7 @@ func (h *OpenVPNHandler) GenerateRuntimeManifest(c *gin.Context) {
 	}
 	record, err := openvpn.BuildRuntimeManifestRecord(instance)
 	if err != nil {
-		dto.Error(c, http.StatusBadRequest, err.Error())
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
@@ -263,7 +266,7 @@ func (h *OpenVPNHandler) CreateUserDraft(c *gin.Context) {
 	}
 	masterKey := strings.TrimSpace(os.Getenv("OPENVPN_SECRET_MASTER_KEY"))
 	if masterKey == "" {
-		dto.Error(c, http.StatusServiceUnavailable, "OPENVPN_SECRET_MASTER_KEY is required before saving OpenVPN client certificate material")
+		dto.Error(c, http.StatusPreconditionFailed, "OPENVPN_SECRET_MASTER_KEY must be configured before saving OpenVPN client certificate material")
 		return
 	}
 	envelope, err := secrets.NewEnvelope(masterKey)
@@ -273,7 +276,7 @@ func (h *OpenVPNHandler) CreateUserDraft(c *gin.Context) {
 	}
 	draft, err := openvpn.BuildUserDraft(openvpn.UserDraftInput{InstanceID: instance.ID, Name: req.Name, AssignedIP: req.AssignedIP, ClientCertPEM: req.ClientCertPEM, ClientKeyPEM: req.ClientKeyPEM}, envelope)
 	if err != nil {
-		dto.Error(c, http.StatusBadRequest, err.Error())
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	tx := database.DB.Begin()
@@ -333,10 +336,10 @@ func (h *OpenVPNHandler) FirewallPlan(c *gin.Context) {
 	}
 	plan, err := openvpn.BuildFirewallPlan(instance)
 	if err != nil {
-		dto.Error(c, http.StatusBadRequest, err.Error())
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	dto.OK(c, "OpenVPN firewall plan generated; rules were not applied", openVPNFirewallResponse(plan))
+	dto.OK(c, "OpenVPN firewall plan generated; rules are applied only on apply", openVPNFirewallResponse(plan))
 }
 
 func (h *OpenVPNHandler) ApplyRuntime(c *gin.Context) {
@@ -347,7 +350,7 @@ func (h *OpenVPNHandler) ApplyRuntime(c *gin.Context) {
 	var manifest models.OpenVPNRuntimeManifest
 	if err := database.DB.Where("instance_id = ?", instance.ID).First(&manifest).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			dto.Error(c, http.StatusConflict, "generate OpenVPN runtime manifest before applying runtime")
+			dto.Error(c, http.StatusPreconditionFailed, "generate the OpenVPN runtime manifest before applying runtime")
 			return
 		}
 		dto.Error(c, http.StatusInternalServerError, "failed to fetch OpenVPN runtime manifest")
@@ -355,27 +358,34 @@ func (h *OpenVPNHandler) ApplyRuntime(c *gin.Context) {
 	}
 	lifecycle, err := openvpn.BuildLifecyclePlan(instance, "start")
 	if err != nil {
-		dto.Error(c, http.StatusBadRequest, err.Error())
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	firewall, err := openvpn.BuildFirewallPlan(instance)
 	if err != nil {
-		dto.Error(c, http.StatusBadRequest, err.Error())
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	commands := append([]string{}, firewall.Rules...)
 	commands = append(commands, lifecycle.Commands...)
-	result, err := runtimeexec.Apply(c.Request.Context(), runtimeexec.Options{RootDir: runtimeRootDir(), Gates: runtimeGates(), ExecutorEnabled: envFlag("VPN_COMMAND_EXECUTOR_ENABLED")}, runtimeexec.ApplyPlan{Files: map[string]string{
-		fmt.Sprintf("openvpn/%d/server.conf", instance.ID):         manifest.ServerConf,
+	result, err := runtimeexec.Apply(c.Request.Context(), runtimeexec.Options{RootDir: runtimeRootDir(), ExecutionEnabled: vpnExecutionEnabled()}, runtimeexec.ApplyPlan{Files: map[string]string{
+		fmt.Sprintf("openvpn/%d/server.conf", instance.ID):        manifest.ServerConf,
 		fmt.Sprintf("openvpn/%d/docker-compose.yml", instance.ID): manifest.ComposeYAML,
 	}, Commands: commands})
 	if err != nil {
-		dto.Error(c, http.StatusPreconditionFailed, err.Error())
+		if errors.Is(err, runtimeexec.ErrExecutionDisabled) {
+			dto.Error(c, http.StatusPreconditionFailed, err.Error())
+			return
+		}
+		dto.Error(c, http.StatusInternalServerError, "OpenVPN runtime apply failed: "+err.Error())
 		return
 	}
 	instance.Enabled = true
 	instance.RuntimeMode = "container_openvpn_active"
-	_ = database.DB.Save(&instance).Error
+	if err := database.DB.Save(&instance).Error; err != nil {
+		dto.OKWarn(c, "OpenVPN runtime applied", result, "applied but failed to persist instance state: "+err.Error())
+		return
+	}
 	dto.OK(c, "OpenVPN runtime applied", result)
 }
 
@@ -410,7 +420,7 @@ func (h *OpenVPNHandler) PreviewClientProfile(c *gin.Context) {
 		TLSAuthPEM:    req.TLSAuthPEM,
 	})
 	if err != nil {
-		dto.Error(c, http.StatusBadRequest, err.Error())
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
@@ -444,7 +454,7 @@ func (h *OpenVPNHandler) PreviewRuntimeManifest(c *gin.Context) {
 		DNS:          req.DNS,
 	})
 	if err != nil {
-		dto.Error(c, http.StatusBadRequest, err.Error())
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 
@@ -460,6 +470,16 @@ func envFlag(key string) bool {
 	return value == "1" || value == "true" || value == "yes" || value == "on"
 }
 
+// vpnExecutionEnabled is the single safety toggle, shared by every protocol, that
+// must be set before any Apply endpoint writes config files or runs provisioning
+// commands on the host. It replaces the former per-step gates
+// (VPN_RUNTIME_EXECUTION_ENABLED / VPN_FIREWALL_APPLY_ENABLED /
+// VPN_HOST_VERIFICATION_PASSED / VPN_COMMAND_EXECUTOR_ENABLED and the OPENVPN_*
+// equivalents). It defaults off so a privileged command never runs unintentionally.
+func vpnExecutionEnabled() bool {
+	return envFlag("VPN_EXECUTION_ENABLED")
+}
+
 func runtimeRootDir() string {
 	root := strings.TrimSpace(os.Getenv("VPN_RUNTIME_ROOT"))
 	if root == "" {
@@ -468,15 +488,22 @@ func runtimeRootDir() string {
 	return root
 }
 
-func runtimeGates() runtimeexec.Gates {
-	return runtimeexec.Gates{RuntimeExecution: envFlag("VPN_RUNTIME_EXECUTION_ENABLED"), FirewallApply: envFlag("VPN_FIREWALL_APPLY_ENABLED"), HostVerification: envFlag("VPN_HOST_VERIFICATION_PASSED")}
-}
-
 func gateStatus(enabled bool) string {
 	if enabled {
 		return "enabled"
 	}
 	return "disabled"
+}
+
+// conflictMessageForOpenVPNName explains a unique-name violation: point the user
+// at restore/purge when the colliding instance is trashed, otherwise report an
+// active duplicate.
+func conflictMessageForOpenVPNName(name string) string {
+	var trashed models.OpenVPNInstance
+	if err := database.DB.Unscoped().Where("name = ? AND deleted_at IS NOT NULL", name).First(&trashed).Error; err == nil {
+		return "OpenVPN instance name exists in trash; restore or permanently delete it first"
+	}
+	return "OpenVPN instance name already in use"
 }
 
 func findOpenVPNInstanceByParam(c *gin.Context) (models.OpenVPNInstance, bool) {
@@ -492,6 +519,10 @@ func findOpenVPNInstanceByParam(c *gin.Context) (models.OpenVPNInstance, bool) {
 			return models.OpenVPNInstance{}, false
 		}
 		dto.Error(c, http.StatusInternalServerError, "failed to fetch OpenVPN instance")
+		return models.OpenVPNInstance{}, false
+	}
+	if !ownsResource(c, instance.OwnerID) {
+		dto.Error(c, http.StatusNotFound, "OpenVPN instance not found")
 		return models.OpenVPNInstance{}, false
 	}
 	return instance, true

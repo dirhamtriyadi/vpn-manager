@@ -30,6 +30,10 @@ type WGInterface struct {
 
 	Peers []Peer `json:"peers,omitempty" gorm:"foreignKey:InterfaceID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
+	// OwnerID scopes the interface to a panel user. Nil means unowned (only
+	// super admins see unowned resources). Set to the creator on create.
+	OwnerID *uint `json:"owner_id,omitempty" gorm:"index"`
+
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`

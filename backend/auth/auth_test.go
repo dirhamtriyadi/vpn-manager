@@ -6,36 +6,14 @@ import (
 )
 
 func newTestService() *Service {
-	return NewService("admin", "s3cret", "test-secret", time.Hour)
-}
-
-func TestAuthenticate(t *testing.T) {
-	svc := newTestService()
-	if !svc.Authenticate("admin", "s3cret") {
-		t.Fatal("expected valid credentials to authenticate")
-	}
-	if svc.Authenticate("admin", "wrong") {
-		t.Fatal("expected wrong password to fail")
-	}
-	if svc.Authenticate("root", "s3cret") {
-		t.Fatal("expected wrong username to fail")
-	}
-}
-
-func TestEnabled(t *testing.T) {
-	if NewService("admin", "", "secret", time.Hour).Enabled() {
-		t.Fatal("expected service to be disabled without a password")
-	}
-	if !newTestService().Enabled() {
-		t.Fatal("expected service to be enabled with credentials")
-	}
+	return NewService("test-secret", time.Hour)
 }
 
 func TestIssueAndValidate(t *testing.T) {
 	svc := newTestService()
 	now := time.Unix(1_700_000_000, 0)
 
-	token, exp, err := svc.Issue(now)
+	token, exp, err := svc.Issue(42, now)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -43,19 +21,19 @@ func TestIssueAndValidate(t *testing.T) {
 		t.Fatal("expected expiry in the future")
 	}
 
-	sub, err := svc.Validate(token, now)
+	id, err := svc.Validate(token, now)
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	if sub != "admin" {
-		t.Fatalf("expected subject admin, got %q", sub)
+	if id != 42 {
+		t.Fatalf("expected subject 42, got %d", id)
 	}
 }
 
 func TestValidateExpired(t *testing.T) {
 	svc := newTestService()
 	now := time.Unix(1_700_000_000, 0)
-	token, _, _ := svc.Issue(now)
+	token, _, _ := svc.Issue(7, now)
 
 	if _, err := svc.Validate(token, now.Add(2*time.Hour)); err != ErrExpiredToken {
 		t.Fatalf("expected ErrExpiredToken, got %v", err)
@@ -65,7 +43,7 @@ func TestValidateExpired(t *testing.T) {
 func TestValidateTampered(t *testing.T) {
 	svc := newTestService()
 	now := time.Unix(1_700_000_000, 0)
-	token, _, _ := svc.Issue(now)
+	token, _, _ := svc.Issue(7, now)
 
 	if _, err := svc.Validate(token+"x", now); err != ErrInvalidToken {
 		t.Fatalf("expected ErrInvalidToken for tampered signature, got %v", err)
@@ -75,7 +53,7 @@ func TestValidateTampered(t *testing.T) {
 	}
 
 	// A token signed with a different secret must not validate.
-	other := NewService("admin", "s3cret", "other-secret", time.Hour)
+	other := NewService("other-secret", time.Hour)
 	if _, err := svc.Validate(mustIssue(t, other, now), now); err != ErrInvalidToken {
 		t.Fatalf("expected ErrInvalidToken for foreign secret, got %v", err)
 	}
@@ -83,7 +61,7 @@ func TestValidateTampered(t *testing.T) {
 
 func mustIssue(t *testing.T, s *Service, now time.Time) string {
 	t.Helper()
-	token, _, err := s.Issue(now)
+	token, _, err := s.Issue(7, now)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}

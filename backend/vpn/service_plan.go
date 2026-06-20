@@ -37,7 +37,7 @@ type ProtocolServicePlan struct {
 	LegacyInsecure bool               `json:"legacy_insecure"`
 }
 
-func BuildProtocolRoadmap(protocol models.VPNProtocol, runtimeExecution, firewallApply, hostVerification bool) (ProtocolRoadmap, error) {
+func BuildProtocolRoadmap(protocol models.VPNProtocol, executionEnabled bool) (ProtocolRoadmap, error) {
 	spec, ok := GetProtocolSpec(protocol)
 	if !ok {
 		return ProtocolRoadmap{}, fmt.Errorf("unsupported vpn protocol: %s", protocol)
@@ -46,28 +46,33 @@ func BuildProtocolRoadmap(protocol models.VPNProtocol, runtimeExecution, firewal
 	if err != nil {
 		return ProtocolRoadmap{}, err
 	}
-	blockers := protocolEnablementBlockers(runtimeExecution, firewallApply, hostVerification)
-	return ProtocolRoadmap{
+	blockers := protocolEnablementBlockers(executionEnabled)
+	roadmap := ProtocolRoadmap{
 		Protocol:            spec.Protocol,
 		Label:               spec.Label,
-		Available:           false,
+		Available:           true,
 		Status:              spec.Status,
 		LegacyInsecure:      spec.LegacyInsecure,
 		RuntimeStrategy:     spec.Capabilities.RuntimeStrategy,
-		ImplementationLevel: "service_plan_scaffold",
+		ImplementationLevel: "production_apply",
 		Components:          plan.Components,
-		RuntimeExecution:    gateLabel(runtimeExecution),
-		FirewallApply:       gateLabel(firewallApply),
-		HostVerification:    gateLabel(hostVerification),
-		EnablementReady:     len(blockers) == 0,
+		RuntimeExecution:    gateLabel(executionEnabled),
+		FirewallApply:       gateLabel(executionEnabled),
+		HostVerification:    gateLabel(executionEnabled),
+		EnablementReady:     executionEnabled,
 		EnablementBlockers:  blockers,
 		NextSteps: []string{
-			"review dry-run service plan on the deployment host",
-			"install/verify required daemons and kernel modules outside the app container",
-			"register a real protocol driver only after host verification passes",
+			"create a draft instance and review its generated config",
+			"install/verify the required daemons and kernel modules on the deployment host",
+			"set VPN_EXECUTION_ENABLED=true, then apply the instance to write config and run provisioning commands",
 		},
-		BlockedMessage: fmt.Sprintf("%s has a complete dry-run service plan but remains unavailable until a real host/runtime driver is implemented and verified.", spec.Label),
-	}, nil
+	}
+	if executionEnabled {
+		roadmap.BlockedMessage = fmt.Sprintf("%s is available; applying an instance writes config and runs provisioning commands on the host.", spec.Label)
+	} else {
+		roadmap.BlockedMessage = fmt.Sprintf("%s is implemented; set VPN_EXECUTION_ENABLED=true so apply can write config and run provisioning commands.", spec.Label)
+	}
+	return roadmap, nil
 }
 
 func BuildProtocolServicePlan(protocol models.VPNProtocol) (ProtocolServicePlan, error) {
@@ -78,12 +83,12 @@ func BuildProtocolServicePlan(protocol models.VPNProtocol) (ProtocolServicePlan,
 	plan := ProtocolServicePlan{
 		Protocol:       spec.Protocol,
 		Label:          spec.Label,
-		ExecutionMode:  "dry_run",
-		Status:         "planned",
+		ExecutionMode:  "host_apply",
+		Status:         "available",
 		LegacyInsecure: spec.LegacyInsecure,
 		Warnings: []string{
-			"Dry-run plan only; the API does not install packages, start services, or apply firewall rules.",
-			"Execute only after host-side verification and explicit feature gates are enabled.",
+			"Applying an instance writes host config files and runs provisioning commands; it requires VPN_EXECUTION_ENABLED=true.",
+			"The API does not install packages: verify the required daemons, kernel modules, and firewall ownership on the host first.",
 		},
 	}
 	switch protocol {
@@ -98,7 +103,7 @@ func BuildProtocolServicePlan(protocol models.VPNProtocol) (ProtocolServicePlan,
 		plan.FirewallPlan = []string{"allow TCP 443 or selected SSTP port", "iptables MASQUERADE for SSTP pool", "track rules with wg-panel SSTP ownership comments"}
 		plan.UserPlan = []string{"store PPP credentials as encrypted secrets", "generate Windows/macOS setup notes"}
 	case models.ProtocolPPTP:
-		plan.Components = []string{"pptpd legacy daemon", "ppp chap-secrets", "GRE protocol handling", "iptables NAT/FORWARD ownership"}
+		plan.Components = []string{"pptpd legacy/insecure daemon", "ppp chap-secrets", "GRE protocol handling", "iptables NAT/FORWARD ownership"}
 		plan.RuntimePlan = []string{"render pptpd.conf and ppp options", "systemctl restart pptpd", "verify GRE passthrough on router/firewall"}
 		plan.FirewallPlan = []string{"allow TCP 1723", "allow GRE protocol 47", "iptables MASQUERADE for PPTP pool"}
 		plan.UserPlan = []string{"store CHAP credentials as encrypted secrets", "show legacy/insecure warning before user creation"}
@@ -119,18 +124,11 @@ func BuildProtocolServicePlan(protocol models.VPNProtocol) (ProtocolServicePlan,
 	return plan, nil
 }
 
-func protocolEnablementBlockers(runtimeExecution, firewallApply, hostVerification bool) []string {
-	blockers := []string{}
-	if !runtimeExecution {
-		blockers = append(blockers, "VPN_RUNTIME_EXECUTION_ENABLED must be true before service/container commands can run")
+func protocolEnablementBlockers(executionEnabled bool) []string {
+	if executionEnabled {
+		return []string{}
 	}
-	if !firewallApply {
-		blockers = append(blockers, "VPN_FIREWALL_APPLY_ENABLED must be true before firewall/NAT rules can be applied")
-	}
-	if !hostVerification {
-		blockers = append(blockers, "VPN_HOST_VERIFICATION_PASSED must be true after host-side tests/build and dry-run plan review")
-	}
-	return blockers
+	return []string{"VPN_EXECUTION_ENABLED must be true before the API writes config files and runs provisioning commands"}
 }
 
 func gateLabel(enabled bool) string {

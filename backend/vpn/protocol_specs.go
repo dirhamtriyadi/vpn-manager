@@ -3,9 +3,8 @@ package vpn
 import "github.com/example/wg-panel/models"
 
 const (
-	ProtocolStatusAvailable     = "available"
-	ProtocolStatusRoadmap       = "roadmap"
-	ProtocolStatusLegacyRoadmap = "legacy_roadmap"
+	ProtocolStatusAvailable       = "available"
+	ProtocolStatusLegacyAvailable = "legacy_available"
 )
 
 type ProtocolSpec struct {
@@ -35,11 +34,11 @@ func AllProtocolSpecs() []ProtocolSpec {
 		{
 			Protocol:       models.ProtocolOpenVPN,
 			Label:          "OpenVPN",
-			Status:         ProtocolStatusRoadmap,
-			Description:    "Roadmap protocol; needs OpenVPN runtime, certificate authority, server config, and .ovpn generation.",
+			Status:         ProtocolStatusAvailable,
+			Description:    "Containerized OpenVPN with certificate-authority secret storage, server config + .ovpn generation, and gated runtime apply.",
 			LegacyInsecure: false,
 			Capabilities: ProtocolCapabilities{
-				RuntimeStrategy:      "container_openvpn_preview",
+				RuntimeStrategy:      "container_openvpn",
 				ConfigDownload:       true,
 				QRCode:               false,
 				RequiresCertificates: true,
@@ -48,8 +47,8 @@ func AllProtocolSpecs() []ProtocolSpec {
 		{
 			Protocol:       models.ProtocolL2TPIPsec,
 			Label:          "L2TP/IPsec",
-			Status:         ProtocolStatusRoadmap,
-			Description:    "Roadmap protocol; needs IPsec/IKE daemon, PPP users, PSK/certificate handling, and firewall/NAT rules.",
+			Status:         ProtocolStatusAvailable,
+			Description:    "Host IPsec/IKE (strongSwan) + xl2tpd with PPP users, PSK handling, firewall/NAT rules, and gated runtime apply.",
 			LegacyInsecure: false,
 			Capabilities: ProtocolCapabilities{
 				RuntimeStrategy:      "host_ipsec_ppp",
@@ -61,11 +60,11 @@ func AllProtocolSpecs() []ProtocolSpec {
 		{
 			Protocol:       models.ProtocolSSTP,
 			Label:          "SSTP",
-			Status:         ProtocolStatusRoadmap,
-			Description:    "Roadmap protocol; needs SSTP daemon, TLS certificate management, users, and service status integration.",
+			Status:         ProtocolStatusAvailable,
+			Description:    "Host SSTP daemon with TLS certificate material, PPP users, service status integration, and gated runtime apply.",
 			LegacyInsecure: false,
 			Capabilities: ProtocolCapabilities{
-				RuntimeStrategy:      "container_or_host_sstp",
+				RuntimeStrategy:      "host_sstp",
 				ConfigDownload:       false,
 				QRCode:               false,
 				RequiresCertificates: true,
@@ -74,11 +73,11 @@ func AllProtocolSpecs() []ProtocolSpec {
 		{
 			Protocol:       models.ProtocolPPTP,
 			Label:          "PPTP",
-			Status:         ProtocolStatusLegacyRoadmap,
-			Description:    "Legacy/insecure compatibility protocol; only consider for old clients that cannot use safer VPNs.",
+			Status:         ProtocolStatusLegacyAvailable,
+			Description:    "Legacy/insecure compatibility protocol (pptpd); functional but enable only for old clients that cannot use safer VPNs.",
 			LegacyInsecure: true,
 			Capabilities: ProtocolCapabilities{
-				RuntimeStrategy:      "legacy_host_pptpd",
+				RuntimeStrategy:      "host_pptpd",
 				ConfigDownload:       false,
 				QRCode:               false,
 				RequiresCertificates: false,

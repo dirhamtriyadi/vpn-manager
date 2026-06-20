@@ -2,6 +2,7 @@ package runtimeexec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,11 +11,10 @@ import (
 	"time"
 )
 
-type Gates struct {
-	RuntimeExecution bool
-	FirewallApply    bool
-	HostVerification bool
-}
+// ErrExecutionDisabled is returned by Apply when execution is not enabled. It is
+// a sentinel so handlers can answer 412 Precondition Failed for a disabled
+// toggle while still mapping a genuine runtime failure to 500.
+var ErrExecutionDisabled = errors.New("VPN execution is disabled; set VPN_EXECUTION_ENABLED=true to write config files and run provisioning commands")
 
 type ApplyPlan struct {
 	Files    map[string]string `json:"files"`
@@ -22,11 +22,12 @@ type ApplyPlan struct {
 }
 
 type Options struct {
-	RootDir         string
-	Gates           Gates
-	ExecutorEnabled bool
-	Runner          CommandRunner
-	Timeout         time.Duration
+	RootDir string
+	// ExecutionEnabled is the single safety toggle (VPN_EXECUTION_ENABLED). When
+	// false, Apply writes nothing and runs nothing, returning ErrExecutionDisabled.
+	ExecutionEnabled   bool
+	Runner             CommandRunner
+	Timeout            time.Duration
 	AllowAbsolutePaths bool
 }
 
@@ -50,17 +51,8 @@ func Apply(ctx context.Context, opts Options, plan ApplyPlan) (ApplyResult, erro
 	if opts.RootDir == "" {
 		return ApplyResult{}, fmt.Errorf("runtime root dir is required")
 	}
-	if !opts.Gates.RuntimeExecution {
-		return ApplyResult{}, fmt.Errorf("VPN_RUNTIME_EXECUTION_ENABLED must be true before runtime commands can run")
-	}
-	if !opts.Gates.FirewallApply {
-		return ApplyResult{}, fmt.Errorf("VPN_FIREWALL_APPLY_ENABLED must be true before firewall rules can be applied")
-	}
-	if !opts.Gates.HostVerification {
-		return ApplyResult{}, fmt.Errorf("VPN_HOST_VERIFICATION_PASSED must be true after host-side verification")
-	}
-	if !opts.ExecutorEnabled {
-		return ApplyResult{}, fmt.Errorf("VPN_COMMAND_EXECUTOR_ENABLED must be true before commands are executed")
+	if !opts.ExecutionEnabled {
+		return ApplyResult{}, ErrExecutionDisabled
 	}
 	root, err := filepath.Abs(opts.RootDir)
 	if err != nil {

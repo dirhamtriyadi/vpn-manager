@@ -58,15 +58,16 @@ api.interceptors.response.use(
 
 export type ApiValidationErrors = Record<string, string[]>
 
-interface ApiErrorItem {
-  field?: string
-  message: string
-}
-
+// Backend error envelope:
+//   generic:    { success: false, code, message }
+//   validation: { success: false, code: "VALIDATION_ERROR", message, errors: { field: [...] } }
+// `code` is a stable machine-readable string (e.g. "CONFLICT", "NOT_FOUND") that
+// the UI can branch on instead of matching the human-readable message.
 interface ApiErrorPayload {
   success?: boolean
+  code?: string
   message?: string
-  errors?: ApiValidationErrors | ApiErrorItem[]
+  errors?: ApiValidationErrors
 }
 
 function errorPayload(err: unknown): ApiErrorPayload | undefined {

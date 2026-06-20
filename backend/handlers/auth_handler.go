@@ -1,13 +1,19 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/example/wg-panel/auth"
+	"github.com/example/wg-panel/database"
 	"github.com/example/wg-panel/dto"
 	"github.com/example/wg-panel/middleware"
+	"github.com/example/wg-panel/models"
+	"github.com/example/wg-panel/security"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // AuthHandler groups authentication endpoints.
@@ -22,7 +28,7 @@ func NewAuthHandler(svc *auth.Service) *AuthHandler {
 
 // Login godoc
 // @Summary      Log in
-// @Description  Exchange the admin credentials (from the environment) for a bearer token.
+// @Description  Exchange a panel user's credentials for a bearer token.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -42,16 +48,32 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	if !h.svc.Enabled() {
-		dto.Error(c, http.StatusServiceUnavailable, "authentication is not configured; set AUTH_USERNAME and AUTH_PASSWORD")
-		return
-	}
-	if !h.svc.Authenticate(req.Username, req.Password) {
-		dto.Error(c, http.StatusUnauthorized, "invalid username or password")
+	var user models.User
+	err := database.DB.Where("username = ?", req.Username).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			dto.Error(c, http.StatusUnauthorized, "invalid username or password")
+			return
+		}
+		dto.Error(c, http.StatusInternalServerError, "failed to look up user")
 		return
 	}
 
-	token, expiresAt, err := h.svc.Issue(time.Now())
+	valid, verr := security.VerifyPassword(user.PasswordHash, req.Password)
+	if verr != nil {
+		dto.Error(c, http.StatusInternalServerError, "failed to verify password")
+		return
+	}
+	if !valid {
+		dto.Error(c, http.StatusUnauthorized, "invalid username or password")
+		return
+	}
+	if !user.Active {
+		dto.Error(c, http.StatusForbidden, "user account is disabled")
+		return
+	}
+
+	token, expiresAt, err := h.svc.Issue(user.ID, time.Now())
 	if err != nil {
 		dto.Error(c, http.StatusInternalServerError, "failed to issue token")
 		return
@@ -61,13 +83,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		Token:     token,
 		TokenType: "Bearer",
 		ExpiresAt: expiresAt.Format(time.RFC3339),
-		Username:  req.Username,
+		Username:  user.Username,
 	})
 }
 
 // Me godoc
 // @Summary      Current user
-// @Description  Return the authenticated user; useful to validate a stored token.
+// @Description  Return the authenticated user with roles and effective permissions.
 // @Tags         auth
 // @Produce      json
 // @Security     BearerAuth
@@ -75,6 +97,36 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Failure      401  {object}  dto.ErrorResponse
 // @Router       /auth/me [get]
 func (h *AuthHandler) Me(c *gin.Context) {
-	user, _ := c.Get(middleware.ContextAuthUser)
-	dto.OK(c, "data fetched successfully", gin.H{"username": user})
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		dto.Error(c, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	dto.OK(c, "data fetched successfully", currentUserResponse(user))
+}
+
+// currentUserResponse serializes the authenticated user with role names and the
+// flattened effective permission set (roles ∪ direct).
+func currentUserResponse(u *models.User) gin.H {
+	roleNames := make([]string, 0, len(u.Roles))
+	for i := range u.Roles {
+		roleNames = append(roleNames, u.Roles[i].Name)
+	}
+	sort.Strings(roleNames)
+
+	perms := u.EffectivePermissions()
+	permNames := make([]string, 0, len(perms))
+	for name := range perms {
+		permNames = append(permNames, name)
+	}
+	sort.Strings(permNames)
+
+	return gin.H{
+		"id":          u.ID,
+		"username":    u.Username,
+		"name":        u.Name,
+		"active":      u.Active,
+		"roles":       roleNames,
+		"permissions": permNames,
+	}
 }

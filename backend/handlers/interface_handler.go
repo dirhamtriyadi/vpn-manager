@@ -45,7 +45,7 @@ func (h *InterfaceHandler) List(c *gin.Context) {
 		"updated_at":  "updated_at",
 	}
 	list := dto.ParseListQuery(c, allowedSorts, "id")
-	query := database.DB.Model(&models.WGInterface{})
+	query := scopeOwned(c, database.DB.Model(&models.WGInterface{}))
 	if list.Search != "" {
 		like := "%" + list.Search + "%"
 		query = query.Where("name LIKE ? OR address LIKE ? OR endpoint LIKE ?", like, like, like)
@@ -145,31 +145,42 @@ func (h *InterfaceHandler) Create(c *gin.Context) {
 		Enabled:         enabled,
 		Masquerade:      masquerade,
 		EgressInterface: strings.TrimSpace(req.EgressInterface),
+		OwnerID:         currentOwnerID(c),
 	}
 
-	// GORM soft deletes keep old rows in the table. Because interface name has a
-	// unique index, a trashed interface with the same name still blocks creating a
-	// duplicate. Ask the user to restore or permanently delete it instead of
-	// silently purging trash.
-	var deletedIface models.WGInterface
-	if err := database.DB.Unscoped().Where("name = ? AND deleted_at IS NOT NULL", req.Name).First(&deletedIface).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		dto.Error(c, http.StatusInternalServerError, "failed to check deleted interfaces")
-		return
-	} else if err == nil {
-		dto.Error(c, http.StatusConflict, "interface name exists in trash; restore or permanently delete it first")
-		return
-	}
-
+	// Let the database's unique constraint on `name` be the single source of
+	// truth. GORM soft deletes keep trashed rows in the table, so a trashed
+	// interface with the same name still occupies that unique name and the insert
+	// fails with gorm.ErrDuplicatedKey (Postgres 23505). We then distinguish an
+	// active duplicate from a trashed one to return a precise 409. This replaces
+	// the old standalone pre-check whose error branch turned any transient DB
+	// hiccup into a confusing 500 "failed to check deleted interfaces".
 	if err := database.DB.Create(&iface).Error; err != nil {
-		dto.Error(c, http.StatusInternalServerError, "failed to create interface (name/port may already exist)")
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			dto.Error(c, http.StatusConflict, conflictMessageForInterfaceName(req.Name))
+			return
+		}
+		dto.Error(c, http.StatusInternalServerError, "failed to create interface")
 		return
 	}
 
-	msg := "interface created"
 	if err := reconcile(iface.ID); err != nil {
-		msg = "interface saved but not applied to kernel: " + err.Error()
+		dto.CreatedWarn(c, "interface created", iface, "not applied to kernel: "+err.Error())
+		return
 	}
-	dto.Created(c, msg, iface)
+	dto.Created(c, "interface created", iface)
+}
+
+// conflictMessageForInterfaceName explains a unique-name violation. Only the
+// interface name is uniquely constrained, so a duplicate is always a name
+// collision; if the colliding interface is in the trash, point the user at
+// restore/purge rather than silently reusing or wiping it.
+func conflictMessageForInterfaceName(name string) string {
+	var trashed models.WGInterface
+	if err := database.DB.Unscoped().Where("name = ? AND deleted_at IS NOT NULL", name).First(&trashed).Error; err == nil {
+		return "interface name exists in trash; restore or permanently delete it first"
+	}
+	return "interface name already in use"
 }
 
 // Update godoc
@@ -222,15 +233,19 @@ func (h *InterfaceHandler) Update(c *gin.Context) {
 	_ = wg.TeardownNAT(&prevNAT)
 
 	if err := database.DB.Save(iface).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			dto.Error(c, http.StatusConflict, "interface name already in use")
+			return
+		}
 		dto.Error(c, http.StatusInternalServerError, "failed to update interface")
 		return
 	}
 
-	msg := "interface updated"
 	if err := reconcile(iface.ID); err != nil {
-		msg = "interface saved but not applied to kernel: " + err.Error()
+		dto.OKWarn(c, "interface updated", iface, "not applied to kernel: "+err.Error())
+		return
 	}
-	dto.OK(c, msg, iface)
+	dto.OK(c, "interface updated", iface)
 }
 
 // Delete godoc
@@ -258,11 +273,11 @@ func (h *InterfaceHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	msg := "interface moved to trash"
 	if removeErr != nil {
-		msg = "interface moved to trash, but device cleanup failed: " + removeErr.Error()
+		dto.NoDataWarn(c, "interface moved to trash", "device cleanup failed: "+removeErr.Error())
+		return
 	}
-	dto.NoData(c, http.StatusOK, msg)
+	dto.NoData(c, http.StatusOK, "interface moved to trash")
 }
 
 func (h *InterfaceHandler) Trash(c *gin.Context) {
@@ -279,7 +294,7 @@ func (h *InterfaceHandler) Trash(c *gin.Context) {
 	if c.Query("sort_order") == "" {
 		list.SortOrder = "desc"
 	}
-	query := database.DB.Unscoped().Model(&models.WGInterface{}).Where("deleted_at IS NOT NULL")
+	query := scopeOwned(c, database.DB.Unscoped().Model(&models.WGInterface{}).Where("deleted_at IS NOT NULL"))
 	if list.Search != "" {
 		like := "%" + list.Search + "%"
 		query = query.Where("name LIKE ? OR address LIKE ? OR endpoint LIKE ?", like, like, like)
@@ -308,6 +323,10 @@ func (h *InterfaceHandler) Restore(c *gin.Context) {
 		dto.Error(c, http.StatusNotFound, "interface not found")
 		return
 	}
+	if !ownsResource(c, iface.OwnerID) {
+		dto.Error(c, http.StatusNotFound, "interface not found")
+		return
+	}
 	if !iface.DeletedAt.Valid {
 		dto.OK(c, "interface already active", iface)
 		return
@@ -319,12 +338,15 @@ func (h *InterfaceHandler) Restore(c *gin.Context) {
 	}
 	// Restore peers that were trashed with this interface. Manually deleted peers
 	// can still be permanently deleted from Trash if needed.
+	// The interface row is already restored (committed above). A failure to
+	// restore its peers is a partial success, not a server error: report 200 with
+	// a warning rather than a misleading 500.
 	if err := database.DB.Unscoped().Model(&models.Peer{}).Where("interface_id = ? AND deleted_at IS NOT NULL", iface.ID).Update("deleted_at", nil).Error; err != nil {
-		dto.Error(c, http.StatusInternalServerError, "interface restored but peers were not restored")
+		dto.OKWarn(c, "interface restored", iface, "peers were not restored: "+err.Error())
 		return
 	}
 	if err := reconcile(iface.ID); err != nil {
-		dto.OK(c, "interface restored but not applied to kernel: "+err.Error(), iface)
+		dto.OKWarn(c, "interface restored", iface, "not applied to kernel: "+err.Error())
 		return
 	}
 	dto.OK(c, "interface restored", iface)
@@ -340,6 +362,10 @@ func (h *InterfaceHandler) Purge(c *gin.Context) {
 		dto.Error(c, http.StatusNotFound, "interface not found")
 		return
 	}
+	if !ownsResource(c, iface.OwnerID) {
+		dto.Error(c, http.StatusNotFound, "interface not found")
+		return
+	}
 	_ = wg.TeardownNAT(&iface)
 	removeErr := wg.RemoveLink(iface.Name)
 	if err := database.DB.Unscoped().Where("interface_id = ?", iface.ID).Delete(&models.Peer{}).Error; err != nil {
@@ -350,11 +376,11 @@ func (h *InterfaceHandler) Purge(c *gin.Context) {
 		dto.Error(c, http.StatusInternalServerError, "failed to permanently delete interface")
 		return
 	}
-	msg := "interface permanently deleted"
 	if removeErr != nil {
-		msg = "interface permanently deleted, but device cleanup failed: " + removeErr.Error()
+		dto.NoDataWarn(c, "interface permanently deleted", "device cleanup failed: "+removeErr.Error())
+		return
 	}
-	dto.NoData(c, http.StatusOK, msg)
+	dto.NoData(c, http.StatusOK, "interface permanently deleted")
 }
 
 // Sync godoc
@@ -369,6 +395,9 @@ func (h *InterfaceHandler) Purge(c *gin.Context) {
 func (h *InterfaceHandler) Sync(c *gin.Context) {
 	id, ok := parseID(c)
 	if !ok {
+		return
+	}
+	if _, ok := getOwnedInterface(c, id); !ok {
 		return
 	}
 	if err := reconcile(id); err != nil {
@@ -393,9 +422,8 @@ func (h *InterfaceHandler) Status(c *gin.Context) {
 		return
 	}
 
-	var iface models.WGInterface
-	if err := database.DB.First(&iface, id).Error; err != nil {
-		dto.Error(c, http.StatusNotFound, "interface not found")
+	iface, ok := getOwnedInterface(c, id)
+	if !ok {
 		return
 	}
 
@@ -473,6 +501,10 @@ func findInterface(c *gin.Context) (*models.WGInterface, error) {
 			dto.Error(c, http.StatusInternalServerError, "failed to fetch interface")
 		}
 		return nil, err
+	}
+	if !ownsResource(c, iface.OwnerID) {
+		dto.Error(c, http.StatusNotFound, "interface not found")
+		return nil, errors.New("forbidden")
 	}
 	return &iface, nil
 }

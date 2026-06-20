@@ -1,9 +1,8 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/example/wg-panel/database"
@@ -14,6 +13,7 @@ import (
 	vpnsvc "github.com/example/wg-panel/vpn"
 	"github.com/example/wg-panel/wg"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type VPNHandler struct {
@@ -58,7 +58,7 @@ func (h *VPNHandler) protocolResponse(spec vpnsvc.ProtocolSpec) dto.VPNProtocolR
 
 func (h *VPNHandler) ProtocolRoadmap(c *gin.Context) {
 	protocol := models.VPNProtocol(c.Param("protocol"))
-	roadmap, err := vpnsvc.BuildProtocolRoadmap(protocol, envFlagAny("VPN_RUNTIME_EXECUTION_ENABLED"), envFlagAny("VPN_FIREWALL_APPLY_ENABLED"), envFlagAny("VPN_HOST_VERIFICATION_PASSED"))
+	roadmap, err := vpnsvc.BuildProtocolRoadmap(protocol, vpnExecutionEnabled())
 	if err != nil {
 		dto.Error(c, http.StatusNotFound, "vpn protocol roadmap not found")
 		return
@@ -85,11 +85,7 @@ func (h *VPNHandler) ProtocolServicePlan(c *gin.Context) {
 
 func (h *VPNHandler) ProtocolProductionPlan(c *gin.Context) {
 	protocol := models.VPNProtocol(c.Param("protocol"))
-	plan, err := vpnsvc.BuildProductionPlan(protocol, vpnsvc.ProductionGates{
-		RuntimeExecution: envFlagAny("VPN_RUNTIME_EXECUTION_ENABLED"),
-		FirewallApply:    envFlagAny("VPN_FIREWALL_APPLY_ENABLED"),
-		HostVerification: envFlagAny("VPN_HOST_VERIFICATION_PASSED"),
-	}, envFlagAny("VPN_COMMAND_EXECUTOR_ENABLED"))
+	plan, err := vpnsvc.BuildProductionPlan(protocol, vpnExecutionEnabled())
 	if err != nil {
 		dto.Error(c, http.StatusNotFound, "vpn protocol production plan not found")
 		return
@@ -109,7 +105,7 @@ func (h *VPNHandler) PreviewProtocolConfig(c *gin.Context) {
 	}
 	preview, err := vpnsvc.BuildProtocolConfigPreview(vpnsvc.ProtocolConfigInput{Protocol: req.Protocol, Name: req.Name, RemoteHost: req.RemoteHost, ListenPort: req.ListenPort, PoolCIDR: req.PoolCIDR, DNS: req.DNS})
 	if err != nil {
-		dto.Error(c, http.StatusBadRequest, err.Error())
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	dto.OK(c, "data fetched successfully", preview)
@@ -122,7 +118,7 @@ func (h *VPNHandler) ListLegacyInstances(c *gin.Context) {
 		return
 	}
 	var instances []models.LegacyVPNInstance
-	if err := database.DB.Where("protocol = ?", protocol).Order("id asc").Find(&instances).Error; err != nil {
+	if err := scopeOwned(c, database.DB.Where("protocol = ?", protocol)).Order("id asc").Find(&instances).Error; err != nil {
 		dto.Error(c, http.StatusInternalServerError, "failed to fetch vpn instance drafts")
 		return
 	}
@@ -151,18 +147,22 @@ func (h *VPNHandler) CreateLegacyInstanceDraft(c *gin.Context) {
 	}
 	preview, err := vpnsvc.BuildProtocolConfigPreview(vpnsvc.ProtocolConfigInput{Protocol: req.Protocol, Name: req.Name, RemoteHost: req.RemoteHost, ListenPort: req.ListenPort, PoolCIDR: req.PoolCIDR, DNS: req.DNS})
 	if err != nil {
-		dto.Error(c, http.StatusBadRequest, err.Error())
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	instance := models.LegacyVPNInstance{Protocol: req.Protocol, Name: req.Name, RemoteHost: req.RemoteHost, ListenPort: req.ListenPort, PoolCIDR: req.PoolCIDR, DNS: req.DNS, Enabled: false, RuntimeMode: preview.RuntimeMode, SecretRef: preview.SecretRefs["credentials"], CertRef: preview.SecretRefs["tls_cert"], KeyRef: preview.SecretRefs["tls_key"]}
+	instance := models.LegacyVPNInstance{Protocol: req.Protocol, Name: req.Name, RemoteHost: req.RemoteHost, ListenPort: req.ListenPort, PoolCIDR: req.PoolCIDR, DNS: req.DNS, Enabled: false, RuntimeMode: preview.RuntimeMode, SecretRef: preview.SecretRefs["credentials"], CertRef: preview.SecretRefs["tls_cert"], KeyRef: preview.SecretRefs["tls_key"], OwnerID: currentOwnerID(c)}
 	if instance.ListenPort == 0 {
 		instance.ListenPort = legacyDefaultPort(protocol)
 	}
 	if err := database.DB.Create(&instance).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			dto.Error(c, http.StatusConflict, "vpn instance name already in use")
+			return
+		}
 		dto.Error(c, http.StatusInternalServerError, "failed to create vpn instance draft")
 		return
 	}
-	dto.Created(c, "vpn instance draft saved; runtime remains disabled", legacyVPNInstanceResponse(instance))
+	dto.Created(c, "vpn instance draft saved; runtime remains disabled until applied", legacyVPNInstanceResponse(instance))
 }
 
 func (h *VPNHandler) ApplyLegacyInstance(c *gin.Context) {
@@ -171,24 +171,43 @@ func (h *VPNHandler) ApplyLegacyInstance(c *gin.Context) {
 		dto.Error(c, http.StatusNotFound, "vpn protocol apply endpoint not found")
 		return
 	}
+	id, ok := parseID(c)
+	if !ok {
+		return
+	}
 	var instance models.LegacyVPNInstance
-	if err := database.DB.Where("protocol = ? AND id = ?", protocol, c.Param("id")).First(&instance).Error; err != nil {
+	if err := database.DB.Where("protocol = ? AND id = ?", protocol, id).First(&instance).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			dto.Error(c, http.StatusNotFound, "vpn instance draft not found")
+			return
+		}
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch vpn instance draft")
+		return
+	}
+	if !ownsResource(c, instance.OwnerID) {
 		dto.Error(c, http.StatusNotFound, "vpn instance draft not found")
 		return
 	}
-	files, commands, err := vpnsvc.BuildLegacyRuntimeApplyPlan(vpnsvc.ProtocolConfigInput{Protocol: instance.Protocol, Name: instance.Name, RemoteHost: instance.RemoteHost, ListenPort: instance.ListenPort, PoolCIDR: instance.PoolCIDR, DNS: instance.DNS}, instance.ID, vpnsvc.ProductionGates{RuntimeExecution: envFlagAny("VPN_RUNTIME_EXECUTION_ENABLED"), FirewallApply: envFlagAny("VPN_FIREWALL_APPLY_ENABLED"), HostVerification: envFlagAny("VPN_HOST_VERIFICATION_PASSED")}, envFlagAny("VPN_COMMAND_EXECUTOR_ENABLED"))
+	files, commands, err := vpnsvc.BuildLegacyRuntimeApplyPlan(vpnsvc.ProtocolConfigInput{Protocol: instance.Protocol, Name: instance.Name, RemoteHost: instance.RemoteHost, ListenPort: instance.ListenPort, PoolCIDR: instance.PoolCIDR, DNS: instance.DNS}, instance.ID)
 	if err != nil {
-		dto.Error(c, http.StatusPreconditionFailed, err.Error())
+		dto.Error(c, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	result, err := runtimeexec.Apply(c.Request.Context(), runtimeexec.Options{RootDir: runtimeRootDirAny(), Gates: runtimeGatesAny(), ExecutorEnabled: envFlagAny("VPN_COMMAND_EXECUTOR_ENABLED"), AllowAbsolutePaths: true}, runtimeexec.ApplyPlan{Files: files, Commands: commands})
+	result, err := runtimeexec.Apply(c.Request.Context(), runtimeexec.Options{RootDir: runtimeRootDir(), ExecutionEnabled: vpnExecutionEnabled(), AllowAbsolutePaths: true}, runtimeexec.ApplyPlan{Files: files, Commands: commands})
 	if err != nil {
-		dto.Error(c, http.StatusPreconditionFailed, err.Error())
+		if errors.Is(err, runtimeexec.ErrExecutionDisabled) {
+			dto.Error(c, http.StatusPreconditionFailed, err.Error())
+			return
+		}
+		dto.Error(c, http.StatusInternalServerError, "vpn runtime apply failed: "+err.Error())
 		return
 	}
 	instance.Enabled = true
 	instance.RuntimeMode = string(instance.Protocol) + "_active"
-	_ = database.DB.Save(&instance).Error
+	if err := database.DB.Save(&instance).Error; err != nil {
+		dto.OKWarn(c, "vpn runtime applied", result, "applied but failed to persist instance state: "+err.Error())
+		return
+	}
 	dto.OK(c, "vpn runtime applied", result)
 }
 
@@ -223,23 +242,6 @@ func legacyDefaultPort(protocol models.VPNProtocol) int {
 	}
 }
 
-func envFlagAny(key string) bool {
-	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
-	return value == "1" || value == "true" || value == "yes" || value == "on"
-}
-
-func runtimeRootDirAny() string {
-	root := strings.TrimSpace(os.Getenv("VPN_RUNTIME_ROOT"))
-	if root == "" {
-		return "/var/lib/wg-panel"
-	}
-	return root
-}
-
-func runtimeGatesAny() runtimeexec.Gates {
-	return runtimeexec.Gates{RuntimeExecution: envFlagAny("VPN_RUNTIME_EXECUTION_ENABLED"), FirewallApply: envFlagAny("VPN_FIREWALL_APPLY_ENABLED"), HostVerification: envFlagAny("VPN_HOST_VERIFICATION_PASSED")}
-}
-
 func (h *VPNHandler) Instances(c *gin.Context) {
 	allowedSorts := map[string]string{
 		"id":          "id",
@@ -252,7 +254,7 @@ func (h *VPNHandler) Instances(c *gin.Context) {
 		"updated_at":  "updated_at",
 	}
 	list := dto.ParseListQuery(c, allowedSorts, "id")
-	query := database.DB.Model(&models.WGInterface{})
+	query := scopeOwned(c, database.DB.Model(&models.WGInterface{}))
 	if list.Search != "" {
 		like := "%" + list.Search + "%"
 		query = query.Where("name LIKE ? OR address LIKE ? OR endpoint LIKE ?", like, like, like)
@@ -279,6 +281,14 @@ func (h *VPNHandler) Instance(c *gin.Context) {
 	}
 	var iface models.WGInterface
 	if err := database.DB.First(&iface, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			dto.Error(c, http.StatusNotFound, "vpn instance not found")
+			return
+		}
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch vpn instance")
+		return
+	}
+	if !ownsResource(c, iface.OwnerID) {
 		dto.Error(c, http.StatusNotFound, "vpn instance not found")
 		return
 	}
@@ -292,6 +302,14 @@ func (h *VPNHandler) Users(c *gin.Context) {
 	}
 	var iface models.WGInterface
 	if err := database.DB.First(&iface, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			dto.Error(c, http.StatusNotFound, "vpn instance not found")
+			return
+		}
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch vpn instance")
+		return
+	}
+	if !ownsResource(c, iface.OwnerID) {
 		dto.Error(c, http.StatusNotFound, "vpn instance not found")
 		return
 	}
@@ -331,6 +349,14 @@ func (h *VPNHandler) Status(c *gin.Context) {
 
 	var iface models.WGInterface
 	if err := database.DB.First(&iface, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			dto.Error(c, http.StatusNotFound, "vpn instance not found")
+			return
+		}
+		dto.Error(c, http.StatusInternalServerError, "failed to fetch vpn instance")
+		return
+	}
+	if !ownsResource(c, iface.OwnerID) {
 		dto.Error(c, http.StatusNotFound, "vpn instance not found")
 		return
 	}

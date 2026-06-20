@@ -6,9 +6,14 @@ Monorepo aplikasi panel web untuk mengelola VPN server dan user dari browser. Sa
 
 - Fondasi VPN Manager multi-protocol dengan daftar protocol: WireGuard, OpenVPN, L2TP/IPsec, SSTP, dan PPTP legacy/insecure.
 - Endpoint generic awal `/api/v1/vpn/*` untuk protocol, instance, user, dan status.
-- Registry/capability scaffold untuk runtime protocol; saat ini hanya WireGuard yang `available` dengan runtime `host_kernel_netlink`.
-- OpenVPN roadmap scaffold mencakup metadata model, `.ovpn` generator, container manifest preview, encrypted secret-reference foundation, draft instance/user endpoints yang menyimpan CA/cert/key sebagai ciphertext, persisted runtime manifest per instance, dry-run lifecycle plan, status parser, firewall/NAT ownership plan, gated apply endpoint (`POST /api/v1/vpn/openvpn/instances/{id}/apply`), dan operational enablement gates (`OPENVPN_RUNTIME_EXECUTION_ENABLED`, `OPENVPN_FIREWALL_APPLY_ENABLED`, `OPENVPN_HOST_VERIFICATION_PASSED`, `VPN_COMMAND_EXECUTOR_ENABLED`); OpenVPN baru menjalankan docker/firewall jika semua gate diaktifkan eksplisit.
-- L2TP/IPsec, SSTP, dan PPTP sekarang punya generic roadmap/service-plan/production-plan endpoints (`/api/v1/vpn/roadmaps/{protocol}`, `/api/v1/vpn/service-plans/{protocol}`, `/api/v1/vpn/production-plans/{protocol}`), config preview (`POST /api/v1/vpn/config-preview`), draft instance endpoints (`GET/POST /api/v1/vpn/{protocol}/instances`), gated apply endpoint (`POST /api/v1/vpn/{protocol}/instances/{id}/apply`), auto-migrated metadata models, plus halaman UI `/vpn/{protocol}`; apply endpoint baru menulis config dan menjalankan command hanya jika semua gate production aktif.
+- Semua protocol (WireGuard, OpenVPN, L2TP/IPsec, SSTP, PPTP) berstatus `available`/fungsional, bukan roadmap. WireGuard berjalan langsung via kernel netlink; protocol lain menulis config host dan menjalankan command provisioning saat di-apply.
+- OpenVPN: metadata model, `.ovpn` generator, container manifest, encrypted secret store untuk CA/cert/key, persisted runtime manifest per instance, lifecycle plan, status parser, firewall/NAT ownership, dan apply endpoint (`POST /api/v1/vpn/openvpn/instances/{id}/apply`) yang benar-benar menjalankan `docker compose up` + iptables saat eksekusi diaktifkan.
+- L2TP/IPsec, SSTP, dan PPTP: roadmap/service-plan/production-plan endpoints (`/api/v1/vpn/roadmaps/{protocol}`, `/api/v1/vpn/service-plans/{protocol}`, `/api/v1/vpn/production-plans/{protocol}`), config preview (`POST /api/v1/vpn/config-preview`), draft instance endpoints (`GET/POST /api/v1/vpn/{protocol}/instances`), apply endpoint (`POST /api/v1/vpn/{protocol}/instances/{id}/apply`) yang menulis config (ipsec/xl2tpd/sstpd/pptpd) dan menjalankan command + iptables, auto-migrated metadata models, plus halaman UI `/vpn/{protocol}`.
+- Eksekusi runtime non-WireGuard dilindungi satu toggle keamanan tunggal `VPN_EXECUTION_ENABLED` (default `false`). Saat `false`, apply melakukan validasi lalu mengembalikan `412 Precondition Failed` tanpa menyentuh host. Aktifkan hanya pada host yang sudah memasang daemon yang dibutuhkan (docker; strongswan + xl2tpd; sstpd; pptpd).
+- Response API memakai envelope konsisten: sukses `{"success":true,"code":"OK","message":...,"data":...}` (plus `meta` untuk paginasi dan `warning` saat apply ke kernel/runtime gagal sebagian); error `{"success":false,"code":"CONFLICT","message":...}` dengan `code` machine-readable dan HTTP status yang tepat (400/401/404/409/412/422/500). Error validasi menambahkan `errors:{field:[...]}`.
+- Autentikasi multi-user berbasis database dengan password di-hash Argon2id. Bootstrap super-admin pertama dari `AUTH_USERNAME`/`AUTH_PASSWORD`, selanjutnya kelola user/role/permission via API.
+- RBAC granular (Spatie-style): permission per aksi (`interfaces.create`, `peers.delete`, `vpn.apply`, dst), role yang membundel permission, dan permission langsung ke user; permission efektif = gabungan role ∪ direct. Endpoint `/users`, `/roles`, `/permissions` dengan guard `RequirePermission` di tiap route, plus role default `super-admin`/`operator`/`viewer`.
+- Resource ownership: tiap interface/OpenVPN/instance VPN punya `owner_id`; user non-admin hanya melihat & mengelola VPN miliknya sendiri, super-admin (`*`) melihat semua. Inilah yang membuat tiap user bisa menangani VPN yang berbeda-beda.
 - Roadmap protocol terdokumentasi di `docs/vpn-protocol-roadmap.md`.
 - Buat WireGuard interface/server dari UI.
 - Generate keypair server/client otomatis.
@@ -59,10 +64,10 @@ wireguard/
 Phase 1 menambahkan fondasi tanpa mematikan fitur WireGuard lama:
 
 - `wireguard`: available sekarang.
-- `openvpn`: roadmap, akan membutuhkan runtime OpenVPN dan generation `.ovpn`.
-- `l2tp_ipsec`: roadmap, kemungkinan memakai strongSwan + xl2tpd atau runtime container setara.
-- `sstp`: roadmap, cocok untuk client Windows dan membutuhkan TLS certificate/runtime SSTP.
-- `pptp`: roadmap legacy/insecure; hanya untuk kompatibilitas perangkat lama dan tidak direkomendasikan untuk deployment baru.
+- `openvpn`: fungsional via container OpenVPN + generation `.ovpn`; apply menjalankan `docker compose` saat `VPN_EXECUTION_ENABLED=true`.
+- `l2tp_ipsec`: fungsional via strongSwan + xl2tpd; apply menulis config ipsec/xl2tpd dan menjalankan systemctl + iptables.
+- `sstp`: fungsional via sstpd dengan TLS certificate; cocok untuk client Windows.
+- `pptp`: fungsional tetapi legacy/insecure; hanya untuk kompatibilitas perangkat lama dan tidak direkomendasikan untuk deployment baru.
 
 Endpoint generic awal:
 

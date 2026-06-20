@@ -22,6 +22,83 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auth/login": {
+            "post": {
+                "description": "Exchange a panel user's credentials for a bearer token.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Log in",
+                "parameters": [
+                    {
+                        "description": "Login payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Return the authenticated user with roles and effective permissions.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Current user",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/interfaces": {
             "get": {
                 "produces": [
@@ -484,12 +561,20 @@ const docTemplate = `{
         "dto.APIResponse": {
             "type": "object",
             "properties": {
+                "code": {
+                    "type": "string"
+                },
                 "data": {},
                 "message": {
                     "type": "string"
                 },
+                "meta": {},
                 "success": {
                     "type": "boolean"
+                },
+                "warning": {
+                    "description": "Warning is set when the primary operation succeeded and was persisted, but a\nsecondary best-effort step degraded (e.g. the WireGuard kernel reconcile or\na VPN runtime apply failed). The status stays 2xx because the resource change\nwas committed; the warning carries the degradation detail for the client.",
+                    "type": "string"
                 }
             }
         },
@@ -511,6 +596,12 @@ const docTemplate = `{
                     "maxLength": 128,
                     "example": "1.1.1.1"
                 },
+                "egress_interface": {
+                    "description": "EgressInterface is the WAN interface for NAT; auto-detected when empty.",
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "eth0"
+                },
                 "enabled": {
                     "type": "boolean",
                     "example": true
@@ -526,6 +617,11 @@ const docTemplate = `{
                     "maximum": 65535,
                     "minimum": 1,
                     "example": 51820
+                },
+                "masquerade": {
+                    "description": "Masquerade enables NAT + forwarding so clients get internet access.",
+                    "type": "boolean",
+                    "example": true
                 },
                 "mtu": {
                     "type": "integer",
@@ -588,17 +684,32 @@ const docTemplate = `{
         "dto.ErrorResponse": {
             "type": "object",
             "properties": {
-                "errors": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "string"
-                    }
+                "code": {
+                    "type": "string"
                 },
+                "errors": {},
                 "message": {
                     "type": "string"
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "dto.LoginRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "example": "change-me"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "admin"
                 }
             }
         },
@@ -619,6 +730,11 @@ const docTemplate = `{
                     "maxLength": 128,
                     "example": "1.1.1.1"
                 },
+                "egress_interface": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "eth0"
+                },
                 "enabled": {
                     "type": "boolean",
                     "example": true
@@ -634,6 +750,10 @@ const docTemplate = `{
                     "maximum": 65535,
                     "minimum": 1,
                     "example": 51820
+                },
+                "masquerade": {
+                    "type": "boolean",
+                    "example": true
                 },
                 "mtu": {
                     "type": "integer",
@@ -670,6 +790,14 @@ const docTemplate = `{
                     "example": 25
                 }
             }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Type \"Bearer\" followed by a space and the token from /auth/login.",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }`

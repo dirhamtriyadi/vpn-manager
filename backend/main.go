@@ -5,6 +5,7 @@ import (
 
 	"github.com/example/wg-panel/config"
 	"github.com/example/wg-panel/database"
+	"github.com/example/wg-panel/rbac"
 	"github.com/example/wg-panel/routes"
 	"github.com/gin-gonic/gin"
 )
@@ -34,6 +35,12 @@ func main() {
 	gin.SetMode(cfg.GinMode)
 
 	database.Connect(cfg)
+
+	// Seed the permission catalog + default roles and bootstrap the first
+	// super-admin from AUTH_USERNAME/AUTH_PASSWORD when no users exist yet.
+	if err := rbac.Seed(database.DB, cfg.AuthUsername, cfg.AuthPassword); err != nil {
+		log.Fatalf("failed to seed RBAC: %v", err)
+	}
 
 	r := routes.Setup(cfg)
 

@@ -2,11 +2,21 @@ basePath: /api/v1
 definitions:
   dto.APIResponse:
     properties:
+      code:
+        type: string
       data: {}
       message:
         type: string
+      meta: {}
       success:
         type: boolean
+      warning:
+        description: |-
+          Warning is set when the primary operation succeeded and was persisted, but a
+          secondary best-effort step degraded (e.g. the WireGuard kernel reconcile or
+          a VPN runtime apply failed). The status stays 2xx because the resource change
+          was committed; the warning carries the degradation detail for the client.
+        type: string
     type: object
   dto.CreateInterfaceRequest:
     properties:
@@ -16,6 +26,12 @@ definitions:
       dns:
         example: 1.1.1.1
         maxLength: 128
+        type: string
+      egress_interface:
+        description: EgressInterface is the WAN interface for NAT; auto-detected when
+          empty.
+        example: eth0
+        maxLength: 32
         type: string
       enabled:
         example: true
@@ -30,6 +46,10 @@ definitions:
         maximum: 65535
         minimum: 1
         type: integer
+      masquerade:
+        description: Masquerade enables NAT + forwarding so clients get internet access.
+        example: true
+        type: boolean
       mtu:
         example: 1420
         maximum: 9000
@@ -81,14 +101,25 @@ definitions:
     type: object
   dto.ErrorResponse:
     properties:
-      errors:
-        additionalProperties:
-          type: string
-        type: object
+      code:
+        type: string
+      errors: {}
       message:
         type: string
       success:
         type: boolean
+    type: object
+  dto.LoginRequest:
+    properties:
+      password:
+        example: change-me
+        type: string
+      username:
+        example: admin
+        type: string
+    required:
+    - password
+    - username
     type: object
   dto.UpdateInterfaceRequest:
     properties:
@@ -98,6 +129,10 @@ definitions:
       dns:
         example: 1.1.1.1
         maxLength: 128
+        type: string
+      egress_interface:
+        example: eth0
+        maxLength: 32
         type: string
       enabled:
         example: true
@@ -112,6 +147,9 @@ definitions:
         maximum: 65535
         minimum: 1
         type: integer
+      masquerade:
+        example: true
+        type: boolean
       mtu:
         example: 1420
         maximum: 9000
@@ -157,6 +195,55 @@ info:
   title: VPN Manager API
   version: "1.0"
 paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Exchange a panel user's credentials for a bearer token.
+      parameters:
+      - description: Login payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Log in
+      tags:
+      - auth
+  /auth/me:
+    get:
+      description: Return the authenticated user with roles and effective permissions.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Current user
+      tags:
+      - auth
   /interfaces:
     get:
       produces:
@@ -459,4 +546,10 @@ paths:
 schemes:
 - http
 - https
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and the token from /auth/login.
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

@@ -6,12 +6,6 @@ import (
 	"github.com/example/wg-panel/models"
 )
 
-type ProductionGates struct {
-	RuntimeExecution bool `json:"runtime_execution"`
-	FirewallApply    bool `json:"firewall_apply"`
-	HostVerification bool `json:"host_verification"`
-}
-
 type ProductionPlan struct {
 	Protocol         models.VPNProtocol `json:"protocol"`
 	Label            string             `json:"label"`
@@ -26,29 +20,26 @@ type ProductionPlan struct {
 	LegacyInsecure   bool               `json:"legacy_insecure"`
 }
 
-func BuildProductionPlan(protocol models.VPNProtocol, gates ProductionGates, executorEnabled bool) (ProductionPlan, error) {
+func BuildProductionPlan(protocol models.VPNProtocol, executionEnabled bool) (ProductionPlan, error) {
 	spec, ok := GetProtocolSpec(protocol)
 	if !ok {
 		return ProductionPlan{}, fmt.Errorf("unsupported vpn protocol: %s", protocol)
 	}
-	blockers := protocolEnablementBlockers(gates.RuntimeExecution, gates.FirewallApply, gates.HostVerification)
+	blockers := protocolEnablementBlockers(executionEnabled)
 	plan := ProductionPlan{
 		Protocol:       spec.Protocol,
 		Label:          spec.Label,
-		Ready:          len(blockers) == 0,
-		ExecutionMode:  "manual",
+		Ready:          executionEnabled,
+		ExecutionMode:  "requires_execution_enabled",
 		Blockers:       blockers,
 		LegacyInsecure: spec.LegacyInsecure,
 		Warnings: []string{
-			"Review generated config paths, ports, subnets, and firewall ownership on the deployment host before execution.",
+			"Review generated config paths, ports, subnets, and firewall ownership on the deployment host before enabling execution.",
 			"The app should run with the least host privileges needed for the selected protocol.",
 		},
 	}
-	if !plan.Ready {
-		plan.ExecutionMode = "blocked"
-	}
-	if plan.Ready && executorEnabled {
-		plan.ExecutionMode = "executor_enabled"
+	if executionEnabled {
+		plan.ExecutionMode = "execution_enabled"
 	}
 
 	switch protocol {

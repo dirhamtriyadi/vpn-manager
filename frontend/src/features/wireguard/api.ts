@@ -17,6 +17,14 @@ function paginated<T>(response: ApiResponse<T[]>): PaginatedResult<T> {
   return { data: response.data ?? [], meta: response.meta ?? emptyMeta }
 }
 
+// The backend reports partial success (resource saved, but kernel/device step
+// degraded) via a separate `warning` field. Fold it back into the human message
+// so the UI, which surfaces non-canonical messages, still tells the user.
+function messageWithWarning(r: { message?: string; warning?: string }): string | undefined {
+  if (r.warning) return r.message ? `${r.message}: ${r.warning}` : r.warning
+  return r.message
+}
+
 // ---- interfaces ----
 
 export async function listInterfaces(params: ListParams = {}): Promise<PaginatedResult<WGInterface>> {
@@ -31,7 +39,7 @@ export async function createInterface(
     "/interfaces",
     payload,
   )
-  return { data: data.data, message: data.message }
+  return { data: data.data, message: messageWithWarning(data) }
 }
 
 export async function updateInterface(
@@ -42,12 +50,12 @@ export async function updateInterface(
     `/interfaces/${id}`,
     payload,
   )
-  return { data: data.data, message: data.message }
+  return { data: data.data, message: messageWithWarning(data) }
 }
 
 export async function deleteInterface(id: number): Promise<string | undefined> {
   const { data } = await api.delete<ApiResponse<unknown>>(`/interfaces/${id}`)
-  return data.message
+  return messageWithWarning(data)
 }
 
 export async function listTrashedInterfaces(params: ListParams = {}): Promise<PaginatedResult<WGInterface>> {
@@ -57,19 +65,19 @@ export async function listTrashedInterfaces(params: ListParams = {}): Promise<Pa
 
 export async function restoreInterface(id: number): Promise<string | undefined> {
   const { data } = await api.post<ApiResponse<WGInterface>>(`/interfaces/${id}/restore`)
-  return data.message
+  return messageWithWarning(data)
 }
 
 export async function purgeInterface(id: number): Promise<string | undefined> {
   const { data } = await api.delete<ApiResponse<unknown>>(`/interfaces/${id}/purge`)
-  return data.message
+  return messageWithWarning(data)
 }
 
 export async function syncInterface(id: number): Promise<string | undefined> {
   const { data } = await api.post<ApiResponse<unknown>>(
     `/interfaces/${id}/sync`,
   )
-  return data.message
+  return messageWithWarning(data)
 }
 
 export async function getInterfaceStatus(
@@ -93,7 +101,7 @@ export async function createPeer(
     `/interfaces/${interfaceId}/peers`,
     payload,
   )
-  return { data: data.data, message: data.message }
+  return { data: data.data, message: messageWithWarning(data) }
 }
 
 export async function updatePeer(
@@ -106,7 +114,7 @@ export async function updatePeer(
 
 export async function deletePeer(peerId: number): Promise<string | undefined> {
   const { data } = await api.delete<ApiResponse<unknown>>(`/peers/${peerId}`)
-  return data.message
+  return messageWithWarning(data)
 }
 
 export async function listTrashedPeers(params: ListParams = {}): Promise<PaginatedResult<Peer>> {
@@ -116,12 +124,12 @@ export async function listTrashedPeers(params: ListParams = {}): Promise<Paginat
 
 export async function restorePeer(peerId: number): Promise<string | undefined> {
   const { data } = await api.post<ApiResponse<Peer>>(`/peers/${peerId}/restore`)
-  return data.message
+  return messageWithWarning(data)
 }
 
 export async function purgePeer(peerId: number): Promise<string | undefined> {
   const { data } = await api.delete<ApiResponse<unknown>>(`/peers/${peerId}/purge`)
-  return data.message
+  return messageWithWarning(data)
 }
 
 export async function getPeerConfigText(peerId: number): Promise<string> {

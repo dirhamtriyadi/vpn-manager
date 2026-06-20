@@ -12,20 +12,20 @@ func testInstance() models.OpenVPNInstance {
 	return models.OpenVPNInstance{ID: 7, Name: "office vpn", RemoteHost: "vpn.example.com", ListenPort: 1194, Protocol: "udp", TunnelCIDR: "10.20.0.0/24", DNS: "1.1.1.1", RuntimeMode: "container_openvpn_preview"}
 }
 
-func TestBuildLifecyclePlanIsDryRunAndDeterministic(t *testing.T) {
+func TestBuildLifecyclePlanIsDeterministic(t *testing.T) {
 	plan, err := BuildLifecyclePlan(testInstance(), "start")
 	if err != nil {
 		t.Fatalf("BuildLifecyclePlan returned error: %v", err)
 	}
-	if plan.Action != "start" || plan.ExecutionMode != "dry_run" || plan.Status != "planned" {
+	if plan.Action != "start" || plan.ExecutionMode != "host_apply" || plan.Status != "planned" {
 		t.Fatalf("unexpected lifecycle plan: %#v", plan)
 	}
 	joined := strings.Join(plan.Commands, "\n")
 	if !strings.Contains(joined, "vpn-manager-openvpn-office-vpn") || !strings.Contains(joined, "docker compose") {
 		t.Fatalf("commands should reference deterministic compose project/container: %s", joined)
 	}
-	if len(plan.Warnings) == 0 || !strings.Contains(plan.Warnings[0], "not executed") {
-		t.Fatalf("expected dry-run warning, got %#v", plan.Warnings)
+	if len(plan.Warnings) == 0 || !strings.Contains(plan.Warnings[0], "VPN_EXECUTION_ENABLED") {
+		t.Fatalf("expected execution-toggle warning, got %#v", plan.Warnings)
 	}
 }
 
@@ -59,15 +59,15 @@ func TestParseStatusLogParsesClientList(t *testing.T) {
 	}
 }
 
-func TestBuildEnablementGatesRequireExplicitFlags(t *testing.T) {
-	gates := BuildEnablementGates(false, false, false)
+func TestBuildEnablementGatesFollowExecutionToggle(t *testing.T) {
+	gates := BuildEnablementGates(false)
 	if gates.Ready {
-		t.Fatal("OpenVPN should not be ready without explicit runtime, firewall, and verification gates")
+		t.Fatal("OpenVPN should not be ready while VPN_EXECUTION_ENABLED is off")
 	}
-	if len(gates.Blockers) != 3 {
-		t.Fatalf("expected 3 blockers, got %#v", gates.Blockers)
+	if len(gates.Blockers) != 1 {
+		t.Fatalf("expected 1 blocker, got %#v", gates.Blockers)
 	}
-	gates = BuildEnablementGates(true, true, true)
+	gates = BuildEnablementGates(true)
 	if !gates.Ready || len(gates.Blockers) != 0 {
 		t.Fatalf("expected ready gates, got %#v", gates)
 	}
