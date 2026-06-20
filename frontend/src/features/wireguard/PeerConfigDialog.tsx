@@ -52,6 +52,24 @@ function routerOSIPv4Routes(value: string): string[] {
     .filter((item) => /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(item))
 }
 
+function isIPv4(value: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(value.trim())
+}
+
+// networkCidr turns an interface address like "10.8.0.1/24" into its network
+// "10.8.0.0/24" so the client gets a route that actually reaches the VPN subnet.
+function networkCidr(cidr: string | undefined | null): string {
+  const m = (cidr ?? "").trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/)
+  if (!m) return ""
+  const octets = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]
+  const prefix = Number(m[5])
+  if (octets.some((o) => o > 255) || prefix > 32) return ""
+  const bits = ((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]) >>> 0
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
+  const net = (bits & mask) >>> 0
+  return `${(net >>> 24) & 255}.${(net >>> 16) & 255}.${(net >>> 8) & 255}.${net & 255}/${prefix}`
+}
+
 function buildRouterOSScript(iface: WGInterface | null, peer: Peer, config: string): string {
   const name = routerOSName(`wg-${peer.name}`)
   const privateKey = configValue(config, "PrivateKey")
@@ -93,11 +111,48 @@ function buildRouterOSScript(iface: WGInterface | null, peer: Peer, config: stri
     peerCmd += ` preshared-key="${quoteRouterOS(presharedKey)}"`
   }
   lines.push(peerCmd)
-  if (ipv4Routes.length > 0) {
-    lines.push(`/ip/route/remove [find comment="vpn-manager ${quoteRouterOS(name)}"]`)
-    for (const route of ipv4Routes) {
-      lines.push(`/ip/route/add dst-address=${route} gateway="${quoteRouterOS(name)}" comment="vpn-manager ${quoteRouterOS(name)}"`)
+
+  // Routes. Always add a route to the VPN subnet so the client can reach the
+  // server side. Full tunnel (0.0.0.0/0) needs the endpoint pinned to the WAN
+  // first, otherwise the encrypted handshake is routed back into the (down)
+  // tunnel — a loop that prevents the handshake (rx stays 0) and kills the
+  // router's own internet.
+  const vpnSubnet = networkCidr(iface?.address)
+  const wantsFullTunnel = ipv4Routes.includes("0.0.0.0/0")
+  const specificRoutes = ipv4Routes.filter((route) => route !== "0.0.0.0/0")
+  const subnetRoutes: string[] = []
+  if (vpnSubnet) subnetRoutes.push(vpnSubnet)
+  for (const route of specificRoutes) {
+    if (!subnetRoutes.includes(route)) subnetRoutes.push(route)
+  }
+
+  lines.push(`/ip/route/remove [find comment="vpn-manager ${quoteRouterOS(name)}"]`)
+  for (const route of subnetRoutes) {
+    lines.push(`/ip/route/add dst-address=${route} gateway="${quoteRouterOS(name)}" comment="vpn-manager ${quoteRouterOS(name)}"`)
+  }
+
+  if (wantsFullTunnel) {
+    lines.push(
+      `# --- FULL TUNNEL (route ALL traffic through WireGuard) ---`,
+      `# Pin the WireGuard endpoint to your normal uplink first, or the encrypted`,
+      `# handshake loops back into the tunnel and never connects (rx stays 0).`,
+      `# Find your WAN gateway with:  /ip route print where dst-address=0.0.0.0/0 active=yes`,
+    )
+    if (isIPv4(endpoint)) {
+      lines.push(
+        `/ip/route/add dst-address=${endpoint}/32 gateway=YOUR_WAN_GATEWAY comment="vpn-manager ${quoteRouterOS(name)} endpoint"`,
+      )
+    } else {
+      lines.push(
+        `# Endpoint is a hostname; resolve it and pin its IP, e.g.:`,
+        `# /ip/route/add dst-address=<endpoint-ip>/32 gateway=YOUR_WAN_GATEWAY comment="vpn-manager ${quoteRouterOS(name)} endpoint"`,
+      )
     }
+    lines.push(
+      `/ip/route/add dst-address=0.0.0.0/0 gateway="${quoteRouterOS(name)}" comment="vpn-manager ${quoteRouterOS(name)}"`,
+      `# Masquerade so this router's LAN clients can use the tunnel:`,
+      `/ip/firewall/nat/add chain=srcnat out-interface="${quoteRouterOS(name)}" action=masquerade comment="vpn-manager ${quoteRouterOS(name)}"`,
+    )
   }
   lines.push(`/interface/wireguard/print detail where name="${quoteRouterOS(name)}"`)
   lines.push(`/interface/wireguard/peers/print detail where interface="${quoteRouterOS(name)}"`)
