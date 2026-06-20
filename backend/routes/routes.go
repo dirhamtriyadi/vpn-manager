@@ -56,6 +56,7 @@ func Setup(cfg *config.Config) *gin.Engine {
 	userHandler := handlers.NewUserHandler()
 	roleHandler := handlers.NewRoleHandler()
 	permissionHandler := handlers.NewPermissionHandler()
+	portForwardHandler := handlers.NewPortForwardHandler(cfg)
 
 	api := r.Group("/api/v1")
 	{
@@ -83,6 +84,16 @@ func Setup(cfg *config.Config) *gin.Engine {
 
 			ifaces.GET("/:id/peers", rp(rbac.PermPeersView), peerHandler.List)
 			ifaces.POST("/:id/peers", rp(rbac.PermPeersCreate), peerHandler.Create)
+		}
+
+		// Public-IP port forwarding: expose a server WAN port into a peer's tunnel.
+		portForwards := protected.Group("/port-forwards")
+		{
+			portForwards.GET("", rp(rbac.PermPortForwardsView), portForwardHandler.List)
+			portForwards.POST("", rp(rbac.PermPortForwardsManage), portForwardHandler.Create)
+			portForwards.GET("/:id", rp(rbac.PermPortForwardsView), portForwardHandler.Get)
+			portForwards.PUT("/:id", rp(rbac.PermPortForwardsManage), portForwardHandler.Update)
+			portForwards.DELETE("/:id", rp(rbac.PermPortForwardsManage), portForwardHandler.Delete)
 		}
 
 		peers := protected.Group("/peers")

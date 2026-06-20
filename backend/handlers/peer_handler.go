@@ -261,6 +261,7 @@ func (h *PeerHandler) Delete(c *gin.Context) {
 	}
 	ifaceID := peer.InterfaceID
 	peerSnapshot := *peer
+	removePortForwardRulesForPeer(interfaceNameByID(peer.InterfaceID), peer.ID)
 	if err := database.DB.Delete(peer).Error; err != nil {
 		dto.Error(c, http.StatusInternalServerError, "failed to move peer to trash")
 		return
@@ -334,6 +335,7 @@ func (h *PeerHandler) Restore(c *gin.Context) {
 		dto.OKWarn(c, "peer restored", peer, "kernel not updated: "+err.Error())
 		return
 	}
+	reapplyPortForwardsForPeer(iface.Name, peer.ID)
 	dto.OK(c, "peer restored", peer)
 }
 
@@ -346,6 +348,7 @@ func (h *PeerHandler) Purge(c *gin.Context) {
 		return
 	}
 	peerSnapshot := *peer
+	purgePortForwardsForPeer(interfaceNameByID(peer.InterfaceID), peer.ID)
 	if err := database.DB.Unscoped().Delete(peer).Error; err != nil {
 		dto.Error(c, http.StatusInternalServerError, "failed to permanently delete peer")
 		return

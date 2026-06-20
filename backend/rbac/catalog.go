@@ -28,6 +28,9 @@ const (
 	PermPeersUpdate = "peers.update"
 	PermPeersDelete = "peers.delete"
 
+	PermPortForwardsView   = "portforwards.view"
+	PermPortForwardsManage = "portforwards.manage"
+
 	PermVPNView   = "vpn.view"
 	PermVPNCreate = "vpn.create"
 	PermVPNApply  = "vpn.apply"
@@ -69,6 +72,9 @@ func AllPermissions() []permissionDef {
 		{PermPeersUpdate, "Update peers"},
 		{PermPeersDelete, "Delete/trash/restore peers"},
 
+		{PermPortForwardsView, "View public-IP port forwards"},
+		{PermPortForwardsManage, "Create, toggle, and delete public-IP port forwards"},
+
 		{PermVPNView, "View VPN protocols, instances, plans, and status"},
 		{PermVPNCreate, "Create VPN instance drafts (L2TP/IPsec, SSTP, PPTP)"},
 		{PermVPNApply, "Apply VPN runtime for non-WireGuard protocols"},
@@ -96,11 +102,12 @@ func DefaultRoles() []roleDef {
 		{"operator", "Manage VPNs (interfaces, peers, OpenVPN, other protocols) but not users/roles", []string{
 			PermInterfacesView, PermInterfacesCreate, PermInterfacesUpdate, PermInterfacesDelete, PermInterfacesSync,
 			PermPeersView, PermPeersCreate, PermPeersUpdate, PermPeersDelete,
+			PermPortForwardsView, PermPortForwardsManage,
 			PermVPNView, PermVPNCreate, PermVPNApply,
 			PermOpenVPNView, PermOpenVPNCreate, PermOpenVPNApply,
 		}},
 		{"viewer", "Read-only access to VPNs", []string{
-			PermInterfacesView, PermPeersView, PermVPNView, PermOpenVPNView,
+			PermInterfacesView, PermPeersView, PermPortForwardsView, PermVPNView, PermOpenVPNView,
 		}},
 	}
 }

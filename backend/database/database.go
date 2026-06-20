@@ -41,6 +41,7 @@ func Connect(cfg *config.Config) {
 		&models.Permission{},
 		&models.WGInterface{},
 		&models.Peer{},
+		&models.PortForward{},
 		&models.OpenVPNInstance{},
 		&models.OpenVPNUser{},
 		&models.OpenVPNRuntimeManifest{},

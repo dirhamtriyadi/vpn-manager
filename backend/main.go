@@ -5,6 +5,7 @@ import (
 
 	"github.com/example/vpn-manager/config"
 	"github.com/example/vpn-manager/database"
+	"github.com/example/vpn-manager/handlers"
 	"github.com/example/vpn-manager/rbac"
 	"github.com/example/vpn-manager/routes"
 	"github.com/gin-gonic/gin"
@@ -41,6 +42,10 @@ func main() {
 	if err := rbac.Seed(database.DB, cfg.AuthUsername, cfg.AuthPassword); err != nil {
 		log.Fatalf("failed to seed RBAC: %v", err)
 	}
+
+	// Restore runtime state on startup: bring enabled interfaces back up and
+	// re-apply port-forward firewall rules (so they survive a host reboot).
+	handlers.BootstrapRuntime()
 
 	r := routes.Setup(cfg)
 

@@ -1,6 +1,7 @@
 import { Link, NavLink, Route, Routes } from "react-router-dom"
 import {
   Archive,
+  Globe,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -17,6 +18,7 @@ import { ProtocolRoadmapPage } from "@/features/vpn/ProtocolRoadmapPage"
 import { UsersPage } from "@/features/admin/UsersPage"
 import { RolesPage } from "@/features/admin/RolesPage"
 import { PermissionsPage } from "@/features/admin/PermissionsPage"
+import { PortForwardsPage } from "@/features/portforward/PortForwardsPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { useAuth } from "@/features/auth/AuthContext"
 
@@ -56,6 +58,14 @@ function App() {
                 Trash
               </NavLink>
             </Button>
+            {hasPermission("portforwards.view") && (
+              <Button variant="outline" size="sm" asChild>
+                <NavLink to="/port-forwards">
+                  <Globe />
+                  Port Forward
+                </NavLink>
+              </Button>
+            )}
             {hasPermission("users.view") && (
               <Button variant="outline" size="sm" asChild>
                 <NavLink to="/users">
@@ -99,6 +109,7 @@ function App() {
           <Route path="/vpn/new" element={<ProtocolSelector />} />
           <Route path="/vpn/openvpn" element={<OpenVPNRoadmapPage />} />
           <Route path="/vpn/:protocol" element={<ProtocolRoadmapPage />} />
+          <Route path="/port-forwards" element={<PortForwardsPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/roles" element={<RolesPage />} />
           <Route path="/permissions" element={<PermissionsPage />} />

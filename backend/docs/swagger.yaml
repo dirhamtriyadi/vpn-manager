@@ -99,6 +99,35 @@ definitions:
     required:
     - name
     type: object
+  dto.CreatePortForwardRequest:
+    properties:
+      comment:
+        maxLength: 128
+        type: string
+      interface_id:
+        type: integer
+      peer_id:
+        type: integer
+      protocol:
+        enum:
+        - tcp
+        - udp
+        type: string
+      public_port:
+        maximum: 65535
+        minimum: 1
+        type: integer
+      target_port:
+        maximum: 65535
+        minimum: 1
+        type: integer
+    required:
+    - interface_id
+    - peer_id
+    - protocol
+    - public_port
+    - target_port
+    type: object
   dto.ErrorResponse:
     properties:
       code:
@@ -180,6 +209,18 @@ definitions:
         type: integer
     required:
     - name
+    type: object
+  dto.UpdatePortForwardRequest:
+    properties:
+      comment:
+        maxLength: 128
+        type: string
+      enabled:
+        type: boolean
+      target_port:
+        maximum: 65535
+        minimum: 1
+        type: integer
     type: object
 host: localhost:8080
 info:
@@ -543,6 +584,142 @@ paths:
       summary: Get client config QR code
       tags:
       - peers
+  /port-forwards:
+    get:
+      description: Lists the caller's public-IP port forwards, optionally filtered
+        by interface
+      parameters:
+      - description: Filter by interface ID
+        in: query
+        name: interface_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: List port forwards
+      tags:
+      - port-forwards
+    post:
+      consumes:
+      - application/json
+      description: Exposes a public port on the server WAN and DNATs it through the
+        tunnel to a peer
+      parameters:
+      - description: Port forward
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreatePortForwardRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Create a port forward
+      tags:
+      - port-forwards
+  /port-forwards/{id}:
+    delete:
+      description: Removes the firewall rules and the record permanently
+      parameters:
+      - description: Port forward ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Delete a port forward
+      tags:
+      - port-forwards
+    get:
+      parameters:
+      - description: Port forward ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get a port forward
+      tags:
+      - port-forwards
+    put:
+      consumes:
+      - application/json
+      description: Updates the target port, comment, or enabled state and re-applies
+        firewall rules
+      parameters:
+      - description: Port forward ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Fields to update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdatePortForwardRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Update a port forward
+      tags:
+      - port-forwards
 schemes:
 - http
 - https

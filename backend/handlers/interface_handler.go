@@ -245,6 +245,11 @@ func (h *InterfaceHandler) Update(c *gin.Context) {
 		dto.OKWarn(c, "interface updated", iface, "not applied to kernel: "+err.Error())
 		return
 	}
+	if iface.Enabled {
+		reapplyPortForwardsForInterface(iface.Name, iface.ID)
+	} else {
+		removePortForwardRulesForInterface(iface.Name, iface.ID)
+	}
 	dto.OK(c, "interface updated", iface)
 }
 
@@ -262,6 +267,7 @@ func (h *InterfaceHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	removePortForwardRulesForInterface(iface.Name, iface.ID)
 	_ = wg.TeardownNAT(iface)
 	removeErr := wg.RemoveLink(iface.Name)
 	if err := database.DB.Where("interface_id = ?", iface.ID).Delete(&models.Peer{}).Error; err != nil {
@@ -349,6 +355,7 @@ func (h *InterfaceHandler) Restore(c *gin.Context) {
 		dto.OKWarn(c, "interface restored", iface, "not applied to kernel: "+err.Error())
 		return
 	}
+	reapplyPortForwardsForInterface(iface.Name, iface.ID)
 	dto.OK(c, "interface restored", iface)
 }
 
@@ -366,6 +373,7 @@ func (h *InterfaceHandler) Purge(c *gin.Context) {
 		dto.Error(c, http.StatusNotFound, "interface not found")
 		return
 	}
+	purgePortForwardsForInterface(iface.Name, iface.ID)
 	_ = wg.TeardownNAT(&iface)
 	removeErr := wg.RemoveLink(iface.Name)
 	if err := database.DB.Unscoped().Where("interface_id = ?", iface.ID).Delete(&models.Peer{}).Error; err != nil {

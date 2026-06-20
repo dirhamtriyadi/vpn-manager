@@ -553,6 +553,208 @@
                     }
                 }
             }
+        },
+        "/port-forwards": {
+            "get": {
+                "description": "Lists the caller's public-IP port forwards, optionally filtered by interface",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "port-forwards"
+                ],
+                "summary": "List port forwards",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Filter by interface ID",
+                        "name": "interface_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Exposes a public port on the server WAN and DNATs it through the tunnel to a peer",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "port-forwards"
+                ],
+                "summary": "Create a port forward",
+                "parameters": [
+                    {
+                        "description": "Port forward",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreatePortForwardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/port-forwards/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "port-forwards"
+                ],
+                "summary": "Get a port forward",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Port forward ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates the target port, comment, or enabled state and re-applies firewall rules",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "port-forwards"
+                ],
+                "summary": "Update a port forward",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Port forward ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdatePortForwardRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Removes the firewall rules and the record permanently",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "port-forwards"
+                ],
+                "summary": "Delete a port forward",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Port forward ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.APIResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -679,6 +881,45 @@
                 }
             }
         },
+        "dto.CreatePortForwardRequest": {
+            "type": "object",
+            "required": [
+                "interface_id",
+                "peer_id",
+                "protocol",
+                "public_port",
+                "target_port"
+            ],
+            "properties": {
+                "comment": {
+                    "type": "string",
+                    "maxLength": 128
+                },
+                "interface_id": {
+                    "type": "integer"
+                },
+                "peer_id": {
+                    "type": "integer"
+                },
+                "protocol": {
+                    "type": "string",
+                    "enum": [
+                        "tcp",
+                        "udp"
+                    ]
+                },
+                "public_port": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1
+                },
+                "target_port": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1
+                }
+            }
+        },
         "dto.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -786,6 +1027,23 @@
                     "maximum": 65535,
                     "minimum": 0,
                     "example": 25
+                }
+            }
+        },
+        "dto.UpdatePortForwardRequest": {
+            "type": "object",
+            "properties": {
+                "comment": {
+                    "type": "string",
+                    "maxLength": 128
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "target_port": {
+                    "type": "integer",
+                    "maximum": 65535,
+                    "minimum": 1
                 }
             }
         }
