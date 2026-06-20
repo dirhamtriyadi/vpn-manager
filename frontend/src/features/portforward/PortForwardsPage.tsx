@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { Globe, Plus, Power, Trash2 } from "lucide-react"
+import { Check, Copy, Globe, Plus, Power, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { apiErrorMessage } from "@/lib/api"
 import { copyToClipboard } from "@/lib/clipboard"
 import { useAuth } from "@/features/auth/AuthContext"
@@ -63,6 +64,7 @@ export function PortForwardsPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [toDelete, setToDelete] = useState<PortForward | null>(null)
+  const [mikrotikFor, setMikrotikFor] = useState<PortForward | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -178,15 +180,8 @@ export function PortForwardsPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            title="Copy MikroTik dstnat command"
-                            onClick={async () => {
-                              const ok = await copyToClipboard(mikrotikHint(pf))
-                              setNotice(
-                                ok
-                                  ? "MikroTik command copied — replace LAN_IP / LAN_PORT with your device."
-                                  : "Copy failed — select and copy this manually:\n" + mikrotikHint(pf),
-                              )
-                            }}
+                            title="Show MikroTik dstnat command"
+                            onClick={() => setMikrotikFor(pf)}
                           >
                             MikroTik
                           </Button>
@@ -225,6 +220,10 @@ export function PortForwardsPage() {
         />
       )}
 
+      {mikrotikFor && (
+        <MikrotikDialog pf={mikrotikFor} onClose={() => setMikrotikFor(null)} />
+      )}
+
       <ConfirmDialog
         open={Boolean(toDelete)}
         title="Delete port forward"
@@ -234,6 +233,60 @@ export function PortForwardsPage() {
         onCancel={() => setToDelete(null)}
       />
     </div>
+  )
+}
+
+function MikrotikDialog({
+  pf,
+  onClose,
+}: {
+  pf: PortForward
+  onClose: () => void
+}) {
+  const script = mikrotikHint(pf)
+  const [copied, setCopied] = useState(false)
+
+  async function copy() {
+    if (await copyToClipboard(script)) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>MikroTik dstnat — {pf.peer_name}</DialogTitle>
+          <DialogDescription>
+            The server already forwards {pf.protocol.toUpperCase()} port{" "}
+            <span className="font-mono">{pf.public_port}</span> into this peer. Run this on
+            the MikroTik to deliver it to the actual LAN device — replace{" "}
+            <span className="font-mono">LAN_IP</span> and{" "}
+            <span className="font-mono">LAN_PORT</span> with your device.
+          </DialogDescription>
+        </DialogHeader>
+        <Textarea readOnly value={script} className="h-28 font-mono text-xs" />
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+          <Button onClick={copy}>
+            {copied ? (
+              <>
+                <Check />
+                Copied
+              </>
+            ) : (
+              <>
+                <Copy />
+                Copy script
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
