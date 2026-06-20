@@ -93,9 +93,20 @@ func TeardownNAT(iface *models.WGInterface) error {
 
 // EnableForwarding turns on IPv4 forwarding. It is never disabled on teardown
 // because it is a host-global setting other interfaces may depend on.
+//
+// Read-first: when forwarding is already on (the usual case on a WireGuard
+// server / router host) there is nothing to do. This matters because under
+// network_mode: host the container often gets /proc/sys mounted read-only, so a
+// blind WriteFile fails with EROFS/EACCES — and since callers treat that as
+// fatal, it would abort the whole NAT / port-forward apply and leave ZERO rules
+// installed even though the host already had forwarding enabled.
 func EnableForwarding() error {
-	if err := os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1\n"), 0o644); err != nil {
-		return fmt.Errorf("enable ip_forward: %w", err)
+	const path = "/proc/sys/net/ipv4/ip_forward"
+	if cur, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(cur)) == "1" {
+		return nil
+	}
+	if err := os.WriteFile(path, []byte("1\n"), 0o644); err != nil {
+		return fmt.Errorf("enable ip_forward (run `sysctl -w net.ipv4.ip_forward=1` on the host): %w", err)
 	}
 	return nil
 }
