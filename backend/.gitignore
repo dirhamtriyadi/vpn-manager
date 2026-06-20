@@ -9,6 +9,12 @@ vpn-manager
 # Env
 .env
 
+# Docker Compose local/production overrides (auto-merged by `docker compose`).
+# Put environment-specific tweaks here instead of editing docker-compose.yml so
+# `git pull` never conflicts.
+docker-compose.override.yml
+docker-compose.*.local.yml
+
 # IDE
 .idea/
 .vscode/

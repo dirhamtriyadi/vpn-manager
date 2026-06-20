@@ -2,15 +2,15 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: vpn_manager
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-vpn_manager}
     ports:
-      - "5434:5432"
+      - "${DB_PORT:-5434}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -27,14 +27,15 @@ services:
     cap_add:
       - NET_ADMIN
     environment:
-      SERVER_PORT: 8083
-      GIN_MODE: release
-      DB_HOST: localhost
-      DB_PORT: 5434
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: vpn_manager
-      DB_SSLMODE: disable
+      SERVER_PORT: ${SERVER_PORT:-8083}
+      GIN_MODE: ${GIN_MODE:-release}
+      # With host networking the API reaches Postgres on the host's published port.
+      DB_HOST: ${DB_HOST:-localhost}
+      DB_PORT: ${DB_PORT:-5434}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-vpn_manager}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
       DEFAULT_ENDPOINT: ${DEFAULT_ENDPOINT:-vpn.example.com}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:5173}
       # Admin login. Change the password before exposing the panel; an empty
@@ -44,6 +45,10 @@ services:
       AUTH_PASSWORD: ${AUTH_PASSWORD:-change-me}
       AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-}
       AUTH_TOKEN_TTL_HOURS: ${AUTH_TOKEN_TTL_HOURS:-24}
+      # VPN runtime execution (OpenVPN/L2TP/SSTP/PPTP). Off by default.
+      VPN_EXECUTION_ENABLED: ${VPN_EXECUTION_ENABLED:-false}
+      VPN_RUNTIME_ROOT: ${VPN_RUNTIME_ROOT:-/var/lib/vpn-manager}
+      OPENVPN_SECRET_MASTER_KEY: ${OPENVPN_SECRET_MASTER_KEY:-}
 
   # Static frontend served by Nginx. The API URL is baked in at build time, so
   # set VITE_API_BASE_URL to a host the browser can reach (not "localhost" if
@@ -54,7 +59,7 @@ services:
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8083/api/v1}
     ports:
-      - "5173:80"
+      - "${WEB_PORT:-5173}:80"
     restart: unless-stopped
 
 volumes:
