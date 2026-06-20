@@ -1,16 +1,27 @@
 import { Link, NavLink, Route, Routes } from "react-router-dom"
-import { Archive, LayoutDashboard, LogOut, Plus } from "lucide-react"
+import {
+  Archive,
+  KeyRound,
+  LayoutDashboard,
+  LogOut,
+  Plus,
+  Shield,
+  Users,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dashboard } from "@/features/wireguard/Dashboard"
 import { TrashPage } from "@/features/wireguard/TrashPage"
 import { ProtocolSelector } from "@/features/vpn/ProtocolSelector"
 import { OpenVPNRoadmapPage } from "@/features/vpn/OpenVPNRoadmapPage"
 import { ProtocolRoadmapPage } from "@/features/vpn/ProtocolRoadmapPage"
+import { UsersPage } from "@/features/admin/UsersPage"
+import { RolesPage } from "@/features/admin/RolesPage"
+import { PermissionsPage } from "@/features/admin/PermissionsPage"
 import { LoginPage } from "@/features/auth/LoginPage"
 import { useAuth } from "@/features/auth/AuthContext"
 
 function App() {
-  const { isAuthenticated, username, logout } = useAuth()
+  const { isAuthenticated, username, logout, hasPermission } = useAuth()
 
   if (!isAuthenticated) {
     return <LoginPage />
@@ -45,6 +56,30 @@ function App() {
                 Trash
               </NavLink>
             </Button>
+            {hasPermission("users.view") && (
+              <Button variant="outline" size="sm" asChild>
+                <NavLink to="/users">
+                  <Users />
+                  Users
+                </NavLink>
+              </Button>
+            )}
+            {hasPermission("roles.view") && (
+              <Button variant="outline" size="sm" asChild>
+                <NavLink to="/roles">
+                  <Shield />
+                  Roles
+                </NavLink>
+              </Button>
+            )}
+            {hasPermission("permissions.view") && (
+              <Button variant="outline" size="sm" asChild>
+                <NavLink to="/permissions">
+                  <KeyRound />
+                  Permissions
+                </NavLink>
+              </Button>
+            )}
             {username && (
               <span className="hidden text-sm text-muted-foreground sm:inline">
                 {username}
@@ -64,6 +99,9 @@ function App() {
           <Route path="/vpn/new" element={<ProtocolSelector />} />
           <Route path="/vpn/openvpn" element={<OpenVPNRoadmapPage />} />
           <Route path="/vpn/:protocol" element={<ProtocolRoadmapPage />} />
+          <Route path="/users" element={<UsersPage />} />
+          <Route path="/roles" element={<RolesPage />} />
+          <Route path="/permissions" element={<PermissionsPage />} />
         </Routes>
       </main>
     </div>

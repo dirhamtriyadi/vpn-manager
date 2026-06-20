@@ -7,6 +7,17 @@ export interface LoginResult {
   username: string
 }
 
+/** The authenticated user with role names and the flattened effective
+ *  permission set (roles ∪ direct), as returned by GET /auth/me. */
+export interface CurrentUser {
+  id: number
+  username: string
+  name: string
+  active: boolean
+  roles: string[]
+  permissions: string[]
+}
+
 interface ApiEnvelope<T> {
   success: boolean
   message: string
@@ -18,5 +29,10 @@ export async function login(username: string, password: string): Promise<LoginRe
     username,
     password,
   })
+  return data.data
+}
+
+export async function getMe(): Promise<CurrentUser> {
+  const { data } = await api.get<ApiEnvelope<CurrentUser>>("/auth/me")
   return data.data
 }

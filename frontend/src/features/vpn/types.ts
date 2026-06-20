@@ -5,7 +5,7 @@ export type VPNProtocol = "wireguard" | "openvpn" | "l2tp_ipsec" | "sstp" | "ppt
 export interface VPNProtocolInfo {
   id: VPNProtocol
   label: string
-  status: "available" | "roadmap" | "legacy_roadmap" | string
+  status: "available" | "legacy_available" | string
   description: string
   available: boolean
   legacy_insecure: boolean

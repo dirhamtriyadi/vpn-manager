@@ -30,11 +30,11 @@ const fallbackProtocols: VPNProtocolInfo[] = [
   {
     id: "openvpn",
     label: "OpenVPN",
-    status: "roadmap",
-    description: "Needs OpenVPN runtime, certificate authority, server config, and .ovpn generation.",
-    available: false,
+    status: "available",
+    description: "Containerized OpenVPN with certificate-authority secret storage, server config + .ovpn generation, and gated runtime apply.",
+    available: true,
     legacy_insecure: false,
-    runtime_strategy: "container_openvpn_preview",
+    runtime_strategy: "container_openvpn",
     config_download: true,
     qr_code: false,
     requires_certificates: true,
@@ -42,9 +42,9 @@ const fallbackProtocols: VPNProtocolInfo[] = [
   {
     id: "l2tp_ipsec",
     label: "L2TP/IPsec",
-    status: "roadmap",
-    description: "Needs IPsec/IKE daemon, PPP users, PSK/certificate handling, and firewall/NAT rules.",
-    available: false,
+    status: "available",
+    description: "Host IPsec/IKE (strongSwan) + xl2tpd with PPP users, PSK handling, firewall/NAT rules, and gated runtime apply.",
+    available: true,
     legacy_insecure: false,
     runtime_strategy: "host_ipsec_ppp",
     config_download: false,
@@ -54,11 +54,11 @@ const fallbackProtocols: VPNProtocolInfo[] = [
   {
     id: "sstp",
     label: "SSTP",
-    status: "roadmap",
-    description: "Needs SSTP daemon, TLS certificate management, users, and service status integration.",
-    available: false,
+    status: "available",
+    description: "Host SSTP daemon with TLS certificate material, PPP users, service status integration, and gated runtime apply.",
+    available: true,
     legacy_insecure: false,
-    runtime_strategy: "container_or_host_sstp",
+    runtime_strategy: "host_sstp",
     config_download: false,
     qr_code: false,
     requires_certificates: true,
@@ -66,16 +66,24 @@ const fallbackProtocols: VPNProtocolInfo[] = [
   {
     id: "pptp",
     label: "PPTP",
-    status: "legacy_roadmap",
-    description: "Legacy/insecure compatibility protocol; only consider for old clients that cannot use safer VPNs.",
-    available: false,
+    status: "legacy_available",
+    description: "Legacy/insecure compatibility protocol (pptpd); functional but enable only for old clients that cannot use safer VPNs.",
+    available: true,
     legacy_insecure: true,
-    runtime_strategy: "legacy_host_pptpd",
+    runtime_strategy: "host_pptpd",
     config_download: false,
     qr_code: false,
     requires_certificates: false,
   },
 ]
+
+// All protocols are implemented/functional; non-WireGuard protocols still need
+// VPN_EXECUTION_ENABLED + host daemons to actually apply. The /vpn/protocols
+// `available` flag is registry-based (only WireGuard), so we treat the `status`
+// field as the source of truth for "functional".
+function isFunctional(p: VPNProtocolInfo): boolean {
+  return p.available || p.status === "available" || p.status === "legacy_available"
+}
 
 export function ProtocolSelector() {
   const [protocols, setProtocols] = useState<VPNProtocolInfo[]>(fallbackProtocols)
@@ -88,7 +96,7 @@ export function ProtocolSelector() {
         setError(null)
       })
       .catch((e) => {
-        setError(apiErrorMessage(e, "Failed to load protocol availability; showing local roadmap."))
+        setError(apiErrorMessage(e, "Failed to load protocol availability; showing local fallback."))
         setProtocols(fallbackProtocols)
       })
   }, [])
@@ -99,7 +107,9 @@ export function ProtocolSelector() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">New VPN instance</h2>
           <p className="text-sm text-muted-foreground">
-            Choose a protocol. WireGuard is available now; every other protocol has a dry-run service plan before host execution is enabled.
+            Choose a protocol. WireGuard applies instantly; OpenVPN, L2TP/IPsec,
+            SSTP, and PPTP write host config and run provisioning on apply when
+            VPN_EXECUTION_ENABLED is set.
           </p>
         </div>
         <Button variant="outline" asChild>
@@ -115,7 +125,7 @@ export function ProtocolSelector() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {protocols.map((protocol) => (
-          <Card key={protocol.id} className={protocol.available ? "border-primary/40" : "opacity-80"}>
+          <Card key={protocol.id} className={isFunctional(protocol) ? "border-primary/40" : "opacity-80"}>
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -125,7 +135,12 @@ export function ProtocolSelector() {
                   </CardTitle>
                   <CardDescription>{protocol.description}</CardDescription>
                 </div>
-                {protocol.available ? (
+                {protocol.legacy_insecure ? (
+                  <Badge variant="secondary">
+                    <Clock className="mr-1 h-3 w-3" />
+                    Legacy
+                  </Badge>
+                ) : isFunctional(protocol) ? (
                   <Badge>
                     <CheckCircle2 className="mr-1 h-3 w-3" />
                     Available
@@ -133,7 +148,7 @@ export function ProtocolSelector() {
                 ) : (
                   <Badge variant="secondary">
                     <Clock className="mr-1 h-3 w-3" />
-                    {protocol.status === "legacy_roadmap" ? "Legacy roadmap" : "Roadmap"}
+                    Roadmap
                   </Badge>
                 )}
               </div>
@@ -144,7 +159,7 @@ export function ProtocolSelector() {
                   Runtime: <span className="font-mono">{protocol.runtime_strategy}</span>
                 </div>
               )}
-              {protocol.available && (protocol.config_download || protocol.qr_code || protocol.requires_certificates) && (
+              {(protocol.config_download || protocol.qr_code || protocol.requires_certificates) && (
                 <div className="flex flex-wrap gap-2 text-xs">
                   {protocol.config_download && <Badge variant="outline">Config download</Badge>}
                   {protocol.qr_code && <Badge variant="outline">QR code</Badge>}
@@ -157,7 +172,7 @@ export function ProtocolSelector() {
                   <span>PPTP is legacy/insecure and should only be used for old client compatibility.</span>
                 </div>
               )}
-              {protocol.available ? (
+              {protocol.id === "wireguard" ? (
                 <Button asChild>
                   <Link to="/?create=wireguard">
                     <Plus />
@@ -167,15 +182,15 @@ export function ProtocolSelector() {
               ) : protocol.id === "openvpn" ? (
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" asChild>
-                    <Link to="/vpn/openvpn">OpenVPN advanced requirements</Link>
+                    <Link to="/vpn/openvpn">OpenVPN advanced</Link>
                   </Button>
                   <Button variant="outline" asChild>
-                    <Link to={`/vpn/${protocol.id}`}>Service plan</Link>
+                    <Link to={`/vpn/${protocol.id}`}>Configure & apply</Link>
                   </Button>
                 </div>
               ) : (
                 <Button variant="outline" asChild>
-                  <Link to={`/vpn/${protocol.id}`}>View service plan</Link>
+                  <Link to={`/vpn/${protocol.id}`}>Configure & apply</Link>
                 </Button>
               )}
             </CardContent>

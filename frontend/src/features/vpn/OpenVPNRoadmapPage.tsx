@@ -23,28 +23,26 @@ import type {
 } from "./types"
 
 const fallbackRoadmap: OpenVPNRoadmap = {
-  available: false,
-  status: "roadmap",
-  runtime_mode: "container_openvpn_preview",
-  secret_storage_status: "encrypted_secret_scaffold",
-  manifest_status: "persisted_manifest_scaffold",
-  lifecycle_status: "dry_run_lifecycle_scaffold",
-  status_parser_status: "status_parser_scaffold",
-  firewall_status: "firewall_plan_scaffold",
-  user_storage_status: "encrypted_user_draft_scaffold",
+  available: true,
+  status: "available",
+  runtime_mode: "container_openvpn",
+  secret_storage_status: "encrypted_secret_store",
+  manifest_status: "persisted_manifest",
+  lifecycle_status: "host_apply",
+  status_parser_status: "status_parser",
+  firewall_status: "firewall_apply",
+  user_storage_status: "encrypted_user_store",
   runtime_execution: "disabled",
   firewall_apply: "disabled",
   host_verification: "disabled",
   enablement_ready: false,
   enablement_blockers: [
-    "OPENVPN_RUNTIME_EXECUTION_ENABLED must be true before container commands can run",
-    "OPENVPN_FIREWALL_APPLY_ENABLED must be true before firewall rules can be applied",
-    "OPENVPN_HOST_VERIFICATION_PASSED must be true after host-side go test/build and plan review",
+    "VPN_EXECUTION_ENABLED must be true before the API writes config and runs container/firewall commands",
   ],
-  blocked_message: "OpenVPN scaffold is complete but remains unavailable until host-verified lifecycle execution and firewall application are explicitly enabled.",
+  blocked_message: "OpenVPN is implemented; set VPN_EXECUTION_ENABLED=true so apply can write config and run the container/firewall commands.",
   next_steps: [
-    "run Go verification on host and review generated lifecycle/firewall plans",
-    "explicitly enable runtime execution after host/container policy is accepted",
+    "create an instance with CA/server certificate material and generate its runtime manifest",
+    "set VPN_EXECUTION_ENABLED=true, then apply the instance to start the container and firewall rules",
   ],
 }
 
@@ -136,9 +134,11 @@ export function OpenVPNRoadmapPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">OpenVPN roadmap</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">OpenVPN</h2>
           <p className="text-sm text-muted-foreground">
-            OpenVPN groundwork is being prepared, but creation stays disabled until a real runtime driver is available.
+            OpenVPN is functional: create an instance with certificate material,
+            generate its manifest, then apply (runs the container + firewall when
+            VPN_EXECUTION_ENABLED is set).
           </p>
         </div>
         <Button variant="outline" asChild>
@@ -161,7 +161,9 @@ export function OpenVPNRoadmapPage() {
                 Runtime status
               </CardTitle>
               <CardDescription>
-                The API has OpenVPN scaffold endpoints and config-profile generation helpers, but no runtime driver yet.
+                Instance/user drafts, encrypted certificate storage, persisted
+                runtime manifest, and a gated apply that runs docker compose +
+                firewall rules.
               </CardDescription>
             </div>
             {roadmap.available ? (

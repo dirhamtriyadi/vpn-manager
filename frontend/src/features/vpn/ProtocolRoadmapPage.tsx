@@ -25,23 +25,24 @@ function fallbackRoadmap(protocol: VPNProtocol): ProtocolRoadmap {
   return {
     protocol,
     label,
-    available: false,
-    status: protocol === "pptp" ? "legacy_roadmap" : "roadmap",
+    available: true,
+    status: protocol === "pptp" ? "legacy_available" : "available",
     legacy_insecure: protocol === "pptp",
-    runtime_strategy: protocol === "l2tp_ipsec" ? "host_ipsec_ppp" : protocol === "sstp" ? "container_or_host_sstp" : protocol === "pptp" ? "legacy_host_pptpd" : "container_openvpn_preview",
-    implementation_level: "service_plan_scaffold",
+    runtime_strategy: protocol === "l2tp_ipsec" ? "host_ipsec_ppp" : protocol === "sstp" ? "host_sstp" : protocol === "pptp" ? "host_pptpd" : "container_openvpn",
+    implementation_level: "production_apply",
     components: [],
     runtime_execution: "disabled",
     firewall_apply: "disabled",
     host_verification: "disabled",
     enablement_ready: false,
     enablement_blockers: [
-      "VPN_RUNTIME_EXECUTION_ENABLED must be true before service/container commands can run",
-      "VPN_FIREWALL_APPLY_ENABLED must be true before firewall/NAT rules can be applied",
-      "VPN_HOST_VERIFICATION_PASSED must be true after host-side tests/build and dry-run plan review",
+      "VPN_EXECUTION_ENABLED must be true before the API writes config files and runs provisioning commands",
     ],
-    next_steps: ["review dry-run service plan on host", "register real driver after verification"],
-    blocked_message: `${label} is scaffolded as a service plan but is not available until a real driver is verified.`,
+    next_steps: [
+      "create a draft instance and review its generated config",
+      "set VPN_EXECUTION_ENABLED=true, then apply to write config and run provisioning commands",
+    ],
+    blocked_message: `${label} is implemented; set VPN_EXECUTION_ENABLED=true so apply can write config and run provisioning commands.`,
   }
 }
 
@@ -88,7 +89,8 @@ export function ProtocolRoadmapPage() {
             {roadmap.label} roadmap
           </h2>
           <p className="text-sm text-muted-foreground">
-            Service plan lengkap tanpa menjalankan command host/firewall dari UI.
+            Protocol fungsional. Apply menulis config host & menjalankan command
+            provisioning saat VPN_EXECUTION_ENABLED=true.
           </p>
         </div>
         <div className="flex gap-2">
@@ -150,7 +152,8 @@ export function ProtocolRoadmapPage() {
         <CardHeader>
           <CardTitle>Production execution plan</CardTitle>
           <CardDescription>
-            Command checklist untuk production. Mode tetap blocked/manual kecuali semua gate host sudah diaktifkan.
+            Command yang dijalankan saat apply. Eksekusi nyata hanya jika
+            VPN_EXECUTION_ENABLED=true.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -193,9 +196,9 @@ export function ProtocolRoadmapPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Dry-run service plan
+            Service plan
           </CardTitle>
-          <CardDescription>Plan ini untuk review; tidak menginstall daemon, tidak start service, dan tidak apply firewall.</CardDescription>
+          <CardDescription>Komponen & rencana host untuk protocol ini. API tidak menginstall daemon; pastikan daemon sudah terpasang di host sebelum mengaktifkan eksekusi.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {lists.map(([title, items]) => (
